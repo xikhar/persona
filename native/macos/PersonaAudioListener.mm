@@ -234,17 +234,37 @@ int main(int argc, const char *argv[]) {
     }
 
     MeterContext meter;
-    auto formatAddress = propertyAddress(
-        kAudioDevicePropertyStreamFormat, kAudioDevicePropertyScopeInput);
-    UInt32 formatSize = sizeof(meter.format);
-    status = AudioObjectGetPropertyData(
-        aggregateID, &formatAddress, 0, nullptr, &formatSize, &meter.format);
-    if (status != noErr) {
-      formatAddress = propertyAddress(kAudioDevicePropertyStreamFormat);
-      formatSize = sizeof(meter.format);
-      status = AudioObjectGetPropertyData(
-          aggregateID, &formatAddress, 0, nullptr, &formatSize, &meter.format);
+    // Core Audio publishes the aggregate device's tapped input stream
+    // asynchronously after the tap list is attached. Reading the format on the
+    // first attempt races that setup and intermittently fails with
+    // kAudioHardwareBadObjectError, so poll both scopes until the stream
+    // appears rather than giving up immediately.
+    const AudioObjectPropertyScope formatScopes[] = {
+        kAudioDevicePropertyScopeInput,
+        kAudioObjectPropertyScopeGlobal,
+    };
+    status = kAudioHardwareBadObjectError;
+    const auto formatDeadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while (true) {
+      for (const AudioObjectPropertyScope scope : formatScopes) {
+        auto formatAddress =
+            propertyAddress(kAudioDevicePropertyStreamFormat, scope);
+        UInt32 formatSize = sizeof(meter.format);
+        const OSStatus readStatus = AudioObjectGetPropertyData(
+            aggregateID, &formatAddress, 0, nullptr, &formatSize, &meter.format);
+        if (readStatus == noErr && meter.format.mSampleRate > 0 &&
+            meter.format.mBitsPerChannel > 0) {
+          status = noErr;
+          break;
+        }
+        status = readStatus != noErr ? readStatus : kAudioHardwareBadObjectError;
+      }
+      if (status == noErr) break;
+      if (std::chrono::steady_clock::now() >= formatDeadline) break;
+      std::this_thread::sleep_for(std::chrono::milliseconds(25));
     }
+
     if (status != noErr) {
       AudioHardwareDestroyAggregateDevice(aggregateID);
       AudioHardwareDestroyProcessTap(tapID);
