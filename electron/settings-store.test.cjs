@@ -11,11 +11,26 @@ const {
   validateGlbFile,
 } = require("./settings-store.cjs");
 
+function writeEmptyPackagedLibrary(root) {
+  const packagedLibraryPath = path.join(root, "library.json");
+  fs.writeFileSync(
+    packagedLibraryPath,
+    JSON.stringify({
+      schema_version: 1,
+      default_model_id: null,
+      models: [],
+      animations: [],
+    }),
+  );
+  return packagedLibraryPath;
+}
+
 function fixture(context) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "persona-settings-"));
   const userDataPath = path.join(root, "user-data");
+  const packagedLibraryPath = writeEmptyPackagedLibrary(root);
   context.after(() => fs.rmSync(root, { force: true, recursive: true }));
-  return { root, userDataPath };
+  return { root, userDataPath, packagedLibraryPath };
 }
 
 function writeGlb(filePath) {
@@ -56,8 +71,8 @@ function writePackagedLibrary(root) {
 }
 
 test("starts with permanent empty Idle and Speaking actions", (context) => {
-  const { userDataPath } = fixture(context);
-  const snapshot = createSettingsStore({ userDataPath }).getSnapshot();
+  const { userDataPath, packagedLibraryPath } = fixture(context);
+  const snapshot = createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot();
 
   assert.equal(snapshot.character_size, 1);
   assert.equal(snapshot.packaged_animation_change_count, 0);
@@ -90,14 +105,14 @@ test("starts with permanent empty Idle and Speaking actions", (context) => {
 });
 
 test("imports, persists, resolves, and deletes user assets", (context) => {
-  const { root, userDataPath } = fixture(context);
+  const { root, userDataPath, packagedLibraryPath } = fixture(context);
   const sourceModel = path.join(root, "assistant.vrm");
   const alternateModel = path.join(root, "alternate.vrm");
   const sourceAnimation = path.join(root, "wave.vrma");
   writeGlb(sourceModel);
   writeGlb(alternateModel);
   writeGlb(sourceAnimation);
-  const store = createSettingsStore({ userDataPath });
+  const store = createSettingsStore({ userDataPath, packagedLibraryPath });
 
   let snapshot = store.importModel({
     filePath: sourceModel,
@@ -154,7 +169,7 @@ test("imports, persists, resolves, and deletes user assets", (context) => {
   snapshot = store.deleteModel(alternate.id);
   assert.equal(snapshot.default_model_id, null);
 
-  const reloaded = createSettingsStore({ userDataPath }).getSnapshot();
+  const reloaded = createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot();
   assert.equal(
     reloaded.models.some((candidate) => candidate.id === model.id),
     false,
@@ -162,7 +177,7 @@ test("imports, persists, resolves, and deletes user assets", (context) => {
 });
 
 test("keeps user library records when migrating the earlier settings schema", (context) => {
-  const { userDataPath } = fixture(context);
+  const { userDataPath, packagedLibraryPath } = fixture(context);
   const modelId = "11111111-1111-4111-8111-111111111111";
   const animationId = "22222222-2222-4222-8222-222222222222";
   const modelDirectory = path.join(userDataPath, "assets", "models");
@@ -196,7 +211,7 @@ test("keeps user library records when migrating the earlier settings schema", (c
     }),
   );
 
-  const snapshot = createSettingsStore({ userDataPath }).getSnapshot();
+  const snapshot = createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot();
   assert.equal(snapshot.schema_version, 3);
   assert.equal(snapshot.default_model_id, modelId);
   assert.equal(snapshot.character_size, 1.15);
@@ -275,10 +290,10 @@ test("uses copy-on-write packaged edits and resets only that layer", (context) =
 });
 
 test("validates custom metadata, files, duplicates, and character size", (context) => {
-  const { root, userDataPath } = fixture(context);
+  const { root, userDataPath, packagedLibraryPath } = fixture(context);
   const sourceAnimation = path.join(root, "wave.vrma");
   writeGlb(sourceAnimation);
-  const store = createSettingsStore({ userDataPath });
+  const store = createSettingsStore({ userDataPath, packagedLibraryPath });
   const metadata = {
     animation_name: "user-wave",
     animation_description: "A wave.",
@@ -310,7 +325,7 @@ test("validates custom metadata, files, duplicates, and character size", (contex
 });
 
 test("migrates reserved legacy uploads into the permanent system actions", (context) => {
-  const { userDataPath } = fixture(context);
+  const { userDataPath, packagedLibraryPath } = fixture(context);
   const idleId = "33333333-3333-4333-8333-333333333333";
   const speakingId = "44444444-4444-4444-8444-444444444444";
   const animationDirectory = path.join(
@@ -344,7 +359,7 @@ test("migrates reserved legacy uploads into the permanent system actions", (cont
     }),
   );
 
-  const snapshot = createSettingsStore({ userDataPath }).getSnapshot();
+  const snapshot = createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot();
 
   const idle = snapshot.animations.find(
     (animation) => animation.animation_name === "idle",
@@ -365,12 +380,12 @@ test("migrates reserved legacy uploads into the permanent system actions", (cont
 });
 
 test("groups multiple uploaded clips under one action and removes them independently", (context) => {
-  const { root, userDataPath } = fixture(context);
+  const { root, userDataPath, packagedLibraryPath } = fixture(context);
   const firstSource = path.join(root, "first.vrma");
   const secondSource = path.join(root, "second.vrma");
   writeGlb(firstSource);
   writeGlb(secondSource);
-  const store = createSettingsStore({ userDataPath });
+  const store = createSettingsStore({ userDataPath, packagedLibraryPath });
   let snapshot = store.createAnimation({
     animation_name: "wave",
     animation_description: "A friendly wave.",

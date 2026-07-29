@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const { execSync } = require("node:child_process");
 const path = require("node:path");
 const test = require("node:test");
 const {
@@ -11,9 +12,23 @@ const {
 } = require("./library-catalog.cjs");
 
 test("keeps permanent empty system actions in the packaged library", () => {
-  const library = readPackagedLibrary(
-    path.join(__dirname, "..", "public", "assets", "library.json"),
-  );
+  // Read the committed blob so the guard survives local uncommitted edits
+  // (e.g. the documented `cp library.json.example library.json` setup step).
+  const repoRoot = path.join(__dirname, "..");
+  let committedJson;
+  try {
+    committedJson = execSync(
+      "git show HEAD:public/assets/library.json",
+      { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    );
+  } catch {
+    // Not in a git repo or file not tracked — fall back to disk.
+    committedJson = require("node:fs").readFileSync(
+      path.join(repoRoot, "public", "assets", "library.json"),
+      "utf8",
+    );
+  }
+  const library = validatePackagedLibrary(JSON.parse(committedJson));
 
   assert.equal(library.default_model_id, null);
   assert.deepEqual(library.models, []);
