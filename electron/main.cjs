@@ -715,7 +715,17 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle("persona:settings-set-character-size", (_event, size) =>
       publishSettings(settingsStore.setCharacterSize(size)),
     );
-    ipcMain.handle("persona:settings-get-mcp-status", () =>
+    ipcMain.handle(
+      "persona:settings-set-model-lighting",
+      (_event, modelId, lighting) =>
+        publishSettings(settingsStore.setModelLighting(modelId, lighting)),
+    );
+    ipcMain.handle(
+      "persona:settings-reset-model-lighting",
+      (_event, modelId) =>
+        publishSettings(settingsStore.resetModelLighting(modelId)),
+    );
+    ipcMain.handle("persona:settings-get-mcp-status" , () =>
       createMcpSettingsStatus({
         error: mcpServerError,
         health: mcpServerHealth,

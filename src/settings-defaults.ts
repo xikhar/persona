@@ -50,6 +50,15 @@ const SYSTEM_ACTIONS: PersonaAnimationSettings[] = [
   },
 ];
 
+export const DEFAULT_LIGHTING: PersonaLightingSettings = {
+  tone_mapping: 'none',
+  exposure: 1,
+  environment_enabled: true,
+  environment_intensity: 1,
+  key_light_intensity: Math.PI,
+  ambient_intensity: Math.PI,
+};
+
 export const SETTINGS_FALLBACK: PersonaSettingsSnapshot = {
   schema_version: 3,
   default_model_id: null,
@@ -57,6 +66,7 @@ export const SETTINGS_FALLBACK: PersonaSettingsSnapshot = {
   packaged_animation_change_count: 0,
   models: [],
   animations: SYSTEM_ACTIONS,
+  model_lighting: {},
 };
 
 function packagedAssetUrl(relativePath: string): string {

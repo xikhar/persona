@@ -42,6 +42,10 @@ contextBridge.exposeInMainWorld("personaSettings", {
     ipcRenderer.invoke("persona:settings-set-default-model", modelId),
   setCharacterSize: (size) =>
     ipcRenderer.invoke("persona:settings-set-character-size", size),
+  setModelLighting: (modelId, lighting) =>
+    ipcRenderer.invoke("persona:settings-set-model-lighting", modelId, lighting),
+  resetModelLighting: (modelId) =>
+    ipcRenderer.invoke("persona:settings-reset-model-lighting", modelId),
   getMcpStatus: () =>
     ipcRenderer.invoke("persona:settings-get-mcp-status"),
   setWindowTheme: (theme) =>

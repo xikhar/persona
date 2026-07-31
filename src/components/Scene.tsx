@@ -1,6 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { useThree } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import {
   ContactShadows,
   Environment,
@@ -11,6 +10,7 @@ import * as THREE from 'three';
 import { Avatar } from './Avatar';
 import type { PlayableAnimationType } from '../animation-catalog';
 import { calculateFullBodyFraming } from '../camera-framing';
+import { DEFAULT_LIGHTING } from '../settings-defaults';
 
 interface SceneProps {
   animation: PlayableAnimationType;
@@ -21,6 +21,7 @@ interface SceneProps {
   enablePan?: boolean;
   framingMargin?: number;
   groundShadow?: boolean;
+  lighting?: PersonaLightingSettings;
   modelUrl: string;
   onAnimationComplete: () => void;
   playback: 'loop' | 'once';
@@ -43,6 +44,40 @@ function supportsTarget(controls: unknown): controls is TargetControls {
   const candidate = controls as Partial<TargetControls>;
   return candidate.target instanceof THREE.Vector3 &&
     typeof candidate.update === 'function';
+}
+
+function LightingController({
+  lighting,
+}: {
+  lighting: PersonaLightingSettings;
+}) {
+  const gl = useThree((state) => state.gl);
+  const scene = useThree((state) => state.scene);
+
+  useLayoutEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability
+    gl.toneMapping =
+      lighting.tone_mapping === 'aces'
+        ? THREE.ACESFilmicToneMapping
+        : THREE.NoToneMapping;
+    // eslint-disable-next-line react-hooks/immutability
+    gl.toneMappingExposure = lighting.exposure;
+    // eslint-disable-next-line react-hooks/immutability
+    gl.outputColorSpace = THREE.SRGBColorSpace;
+    // eslint-disable-next-line react-hooks/immutability
+    scene.environmentIntensity = lighting.environment_enabled
+      ? lighting.environment_intensity
+      : 0;
+  }, [
+    gl,
+    scene,
+    lighting.tone_mapping,
+    lighting.exposure,
+    lighting.environment_enabled,
+    lighting.environment_intensity,
+  ]);
+
+  return null;
 }
 
 function FullBodyCamera({
@@ -101,6 +136,7 @@ function FullBodyCamera({
 }
 
 export function Scene(props: SceneProps) {
+  const lighting = props.lighting ?? DEFAULT_LIGHTING;
   const [avatarScene, setAvatarScene] = useState<THREE.Object3D | null>(null);
   const [grounding, setGrounding] = useState<Grounding | null>(null);
   const handleAvatarReady = useCallback((scene: THREE.Object3D) => {
@@ -127,15 +163,19 @@ export function Scene(props: SceneProps) {
       gl={{
         antialias: true,
         alpha: true,
-        toneMapping: THREE.NoToneMapping,
+        toneMapping: lighting.tone_mapping === 'aces'
+          ? THREE.ACESFilmicToneMapping
+          : THREE.NoToneMapping,
+        toneMappingExposure: lighting.exposure,
         outputColorSpace: THREE.SRGBColorSpace,
       }}
       style={{ background: 'transparent' }}
     >
+      <LightingController lighting={lighting} />
       <directionalLight
         color={[1, 1, 1]}
         position={[-3, 3, 3]}
-        intensity={Math.PI}
+        intensity={lighting.key_light_intensity}
       />
       <ambientLight
         color={[
@@ -143,9 +183,11 @@ export function Scene(props: SceneProps) {
           0.0036765073221525194,
           0.0036765073221525194,
         ]}
-        intensity={Math.PI}
+        intensity={lighting.ambient_intensity}
       />
-      <Environment files={dawnEnvironment} />
+      {lighting.environment_enabled && (
+        <Environment files={dawnEnvironment} />
+      )}
       <FullBodyCamera
         characterSize={props.characterSize}
         framingMargin={props.framingMargin ?? 1.12}

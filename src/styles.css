@@ -1396,6 +1396,130 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+/* --- Lighting controls -------------------------------------------------- */
+
+.lighting-panel {
+  padding-bottom: 25px;
+}
+
+.lighting-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.lighting-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.lighting-row label > span {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.lighting-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.lighting-value {
+  min-width: 56px;
+  text-align: right;
+  font-size: var(--fs-md);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px 8px;
+}
+
+.lighting-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.lighting-toggle-row > span {
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+}
+
+.toggle-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+
+.toggle-switch.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--text-primary);
+  border-radius: 50%;
+  transition: transform var(--dur) var(--ease);
+}
+
+.toggle-switch.active::after {
+  transform: translateX(18px);
+}
+
+.lighting-select-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.lighting-select-row > span {
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+}
+
+.lighting-select-row select {
+  background: var(--bg-inset);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px 8px;
+  font-size: var(--fs-md);
+}
+
+.lighting-reset-button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-tertiary);
+  border-radius: var(--r-md);
+  padding: 5px 12px;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.lighting-reset-button:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
 /* --- MCP ---------------------------------------------------------------- */
 
 .mcp-health-badge {

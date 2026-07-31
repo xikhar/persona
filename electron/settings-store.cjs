@@ -32,6 +32,7 @@ function defaultState(packagedLibrary) {
     schema_version: SETTINGS_SCHEMA_VERSION,
     default_model_id: packagedLibrary.default_model_id,
     character_size: 1,
+    model_lighting: {},
     models: [],
     animations: [],
     animation_clips: {},
@@ -268,6 +269,10 @@ function safeReadState(settingsPath, packagedLibrary) {
           ? parsed.default_model_id
           : fallback.default_model_id,
       character_size: parsed.character_size,
+      model_lighting:
+        parsed.model_lighting && typeof parsed.model_lighting === "object"
+          ? parsed.model_lighting
+          : {},
       models: sanitizeModels(parsed.models),
       packaged_animation_overrides: overrides,
       hidden_packaged_animation_ids: hidden,
@@ -464,6 +469,7 @@ function createSettingsStore({
       packaged_animation_change_count: changedPackagedIds.size,
       models,
       animations: availableAnimations(),
+      model_lighting: state.model_lighting ?? {},
     };
   }
 
@@ -712,6 +718,66 @@ function createSettingsStore({
     return getSnapshot();
   }
 
+  function setModelLighting(modelId, lighting) {
+    if (typeof modelId !== "string" || modelId.trim() === "") {
+      throw new Error("modelId is required.");
+    }
+    if (!lighting || typeof lighting !== "object") {
+      throw new Error("lighting must be an object.");
+    }
+    const current = state.model_lighting[modelId] ?? {};
+    const merged = { ...current };
+    if (lighting.tone_mapping !== undefined) {
+      if (lighting.tone_mapping !== "none" && lighting.tone_mapping !== "aces") {
+        throw new Error("tone_mapping must be 'none' or 'aces'.");
+      }
+      merged.tone_mapping = lighting.tone_mapping;
+    }
+    if (lighting.exposure !== undefined) {
+      const v = Number(lighting.exposure);
+      if (!Number.isFinite(v) || v < 0.1 || v > 5) {
+        throw new Error("exposure must be between 0.1 and 5.");
+      }
+      merged.exposure = Math.round(v * 100) / 100;
+    }
+    if (lighting.environment_enabled !== undefined) {
+      merged.environment_enabled = Boolean(lighting.environment_enabled);
+    }
+    if (lighting.environment_intensity !== undefined) {
+      const v = Number(lighting.environment_intensity);
+      if (!Number.isFinite(v) || v < 0 || v > 5) {
+        throw new Error("environment_intensity must be between 0 and 5.");
+      }
+      merged.environment_intensity = Math.round(v * 100) / 100;
+    }
+    if (lighting.key_light_intensity !== undefined) {
+      const v = Number(lighting.key_light_intensity);
+      if (!Number.isFinite(v) || v < 0 || v > 10) {
+        throw new Error("key_light_intensity must be between 0 and 10.");
+      }
+      merged.key_light_intensity = Math.round(v * 100) / 100;
+    }
+    if (lighting.ambient_intensity !== undefined) {
+      const v = Number(lighting.ambient_intensity);
+      if (!Number.isFinite(v) || v < 0 || v > 10) {
+        throw new Error("ambient_intensity must be between 0 and 10.");
+      }
+      merged.ambient_intensity = Math.round(v * 100) / 100;
+    }
+    state.model_lighting[modelId] = merged;
+    writeState();
+    return getSnapshot();
+  }
+
+  function resetModelLighting(modelId) {
+    if (typeof modelId !== "string" || modelId.trim() === "") {
+      throw new Error("modelId is required.");
+    }
+    delete state.model_lighting[modelId];
+    writeState();
+    return getSnapshot();
+  }
+
   function getAnimation(animationName) {
     return (
       availableAnimations().find(
@@ -762,6 +828,8 @@ function createSettingsStore({
     resolveAssetRequest,
     setCharacterSize,
     setDefaultModel,
+    setModelLighting,
+    resetModelLighting,
     updateAnimation,
   };
 }

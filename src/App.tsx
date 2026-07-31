@@ -124,6 +124,7 @@ export function App() {
         animationUrls={animationUrls}
         audioLevel={audioLevel}
         characterSize={settings.character_size}
+        lighting={settings.model_lighting[defaultModel.id]}
         modelUrl={defaultModel.asset_url}
         onAnimationComplete={handleAnimationComplete}
         playback={bodyOverride ? 'once' : 'loop'}

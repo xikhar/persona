@@ -14,6 +14,7 @@ import {
 import {
   loadPackagedSettingsFallback,
   SETTINGS_FALLBACK,
+  DEFAULT_LIGHTING,
 } from '../settings-defaults';
 import {
   applyTheme,
@@ -536,6 +537,47 @@ export function SettingsPage() {
     await run(
       () => bridge.setCharacterSize(size),
       `Default character size set to ${Math.round(size * 100)}%.`,
+    );
+  };
+
+  const previewLighting: PersonaLightingSettings = useMemo(() => {
+    if (!selectedModel) return DEFAULT_LIGHTING;
+    return settings.model_lighting[selectedModel.id] ?? DEFAULT_LIGHTING;
+  }, [selectedModel, settings.model_lighting]);
+
+  const previewLightingField = (
+    field: keyof PersonaLightingSettings,
+    value: string | number | boolean,
+  ) => {
+    if (!selectedModel) return;
+    setSettings((current) => ({
+      ...current,
+      model_lighting: {
+        ...current.model_lighting,
+        [selectedModel.id]: {
+          ...previewLighting,
+          [field]: value,
+        },
+      },
+    }));
+  };
+
+  const saveLightingField = async (
+    field: keyof PersonaLightingSettings,
+    value: string | number | boolean,
+  ) => {
+    if (!bridge || !selectedModel) return;
+    await run(
+      () => bridge.setModelLighting(selectedModel.id, { [field]: value }),
+      'Lighting updated.',
+    );
+  };
+
+  const resetLighting = async () => {
+    if (!bridge || !selectedModel) return;
+    await run(
+      () => bridge.resetModelLighting(selectedModel.id),
+      'Lighting reset to Persona defaults.',
     );
   };
 
@@ -1172,6 +1214,182 @@ export function SettingsPage() {
                   <span>160%</span>
                 </div>
               </section>
+
+              <section className="settings-panel lighting-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Lighting</h2>
+                    <p>
+                      Adjust environment and key light for VRM models that look
+                      overexposed or too dark.
+                    </p>
+                  </div>
+                  <button
+                    className="lighting-reset-button"
+                    onClick={() => void resetLighting()}
+                    type="button"
+                  >
+                    Reset lighting
+                  </button>
+                </div>
+
+                <div className="lighting-select-row">
+                  <span>Tone mapping</span>
+                  <select
+                    onChange={(e) => {
+                      previewLightingField('tone_mapping', e.target.value);
+                      void saveLightingField('tone_mapping', e.target.value);
+                    }}
+                    value={previewLighting.tone_mapping}
+                  >
+                    <option value="none">None</option>
+                    <option value="aces">ACES Filmic</option>
+                  </select>
+                </div>
+
+                <div className="lighting-toggle-row">
+                  <span>HDR environment</span>
+                  <div
+                    className={`toggle-switch${previewLighting.environment_enabled ? ' active' : ''}`}
+                    onClick={() => {
+                      const next = !previewLighting.environment_enabled;
+                      previewLightingField('environment_enabled', next);
+                      void saveLightingField('environment_enabled', next);
+                    }}
+                    role="switch"
+                    aria-checked={previewLighting.environment_enabled}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        const next = !previewLighting.environment_enabled;
+                        previewLightingField('environment_enabled', next);
+                        void saveLightingField('environment_enabled', next);
+                      }
+                    }}
+                  />
+                </div>
+
+                <div className="lighting-row">
+                  <label>
+                    <span>Environment intensity</span>
+                    <input
+                      max="2"
+                      min="0"
+                      onChange={(e) => previewLightingField('environment_intensity', Number(e.target.value))}
+                      onPointerUp={(e) => void saveLightingField('environment_intensity', Number((e.target as HTMLInputElement).value))}
+                      step="0.01"
+                      type="range"
+                      value={previewLighting.environment_intensity}
+                    />
+                    <div className="slider-labels">
+                      <span>0.00</span>
+                      <span>1.00</span>
+                      <span>2.00</span>
+                    </div>
+                  </label>
+                  <input
+                    className="lighting-value"
+                    max="2"
+                    min="0"
+                    onBlur={(e) => void saveLightingField('environment_intensity', Number(e.target.value))}
+                    onChange={(e) => previewLightingField('environment_intensity', Number(e.target.value))}
+                    step="0.01"
+                    type="number"
+                    value={previewLighting.environment_intensity}
+                  />
+                </div>
+
+                <div className="lighting-row">
+                  <label>
+                    <span>Key light intensity</span>
+                    <input
+                      max="4"
+                      min="0"
+                      onChange={(e) => previewLightingField('key_light_intensity', Number(e.target.value))}
+                      onPointerUp={(e) => void saveLightingField('key_light_intensity', Number((e.target as HTMLInputElement).value))}
+                      step="0.01"
+                      type="range"
+                      value={previewLighting.key_light_intensity}
+                    />
+                    <div className="slider-labels">
+                      <span>0.00</span>
+                      <span>{Math.PI.toFixed(2)}</span>
+                      <span>4.00</span>
+                    </div>
+                  </label>
+                  <input
+                    className="lighting-value"
+                    max="4"
+                    min="0"
+                    onBlur={(e) => void saveLightingField('key_light_intensity', Number(e.target.value))}
+                    onChange={(e) => previewLightingField('key_light_intensity', Number(e.target.value))}
+                    step="0.01"
+                    type="number"
+                    value={previewLighting.key_light_intensity}
+                  />
+                </div>
+
+                <div className="lighting-row">
+                  <label>
+                    <span>Ambient / fill intensity</span>
+                    <input
+                      max="4"
+                      min="0"
+                      onChange={(e) => previewLightingField('ambient_intensity', Number(e.target.value))}
+                      onPointerUp={(e) => void saveLightingField('ambient_intensity', Number((e.target as HTMLInputElement).value))}
+                      step="0.01"
+                      type="range"
+                      value={previewLighting.ambient_intensity}
+                    />
+                    <div className="slider-labels">
+                      <span>0.00</span>
+                      <span>{Math.PI.toFixed(2)}</span>
+                      <span>4.00</span>
+                    </div>
+                  </label>
+                  <input
+                    className="lighting-value"
+                    max="4"
+                    min="0"
+                    onBlur={(e) => void saveLightingField('ambient_intensity', Number(e.target.value))}
+                    onChange={(e) => previewLightingField('ambient_intensity', Number(e.target.value))}
+                    step="0.01"
+                    type="number"
+                    value={previewLighting.ambient_intensity}
+                  />
+                </div>
+
+                <div className="lighting-row">
+                  <label>
+                    <span>Exposure</span>
+                    <input
+                      max="3"
+                      min="0.1"
+                      onChange={(e) => previewLightingField('exposure', Number(e.target.value))}
+                      onPointerUp={(e) => void saveLightingField('exposure', Number((e.target as HTMLInputElement).value))}
+                      step="0.01"
+                      type="range"
+                      value={previewLighting.exposure}
+                    />
+                    <div className="slider-labels">
+                      <span>0.10</span>
+                      <span>1.00</span>
+                      <span>3.00</span>
+                    </div>
+                  </label>
+                  <input
+                    className="lighting-value"
+                    max="3"
+                    min="0.1"
+                    onBlur={(e) => void saveLightingField('exposure', Number(e.target.value))}
+                    onChange={(e) => previewLightingField('exposure', Number(e.target.value))}
+                    step="0.01"
+                    type="number"
+                    value={previewLighting.exposure}
+                  />
+                </div>
+              </section>
             </>
           )}
 
@@ -1398,6 +1616,7 @@ export function SettingsPage() {
                   animationUrls={previewAnimationUrls}
                   audioLevel={0}
                   characterSize={settings.character_size}
+                  lighting={previewLighting}
                   enablePan={false}
                   framingMargin={1.22}
                   groundShadow

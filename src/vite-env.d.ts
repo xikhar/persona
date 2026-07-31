@@ -21,6 +21,15 @@ interface AudioListenerStatus {
   source: string | null;
 }
 
+interface PersonaLightingSettings {
+  tone_mapping: 'none' | 'aces';
+  exposure: number;
+  environment_enabled: boolean;
+  environment_intensity: number;
+  key_light_intensity: number;
+  ambient_intensity: number;
+}
+
 type PersonaAnimationType =
   | 'IDLE'
   | 'GREETING'
@@ -67,6 +76,7 @@ interface PersonaSettingsSnapshot {
   packaged_animation_change_count: number;
   models: PersonaModelSettings[];
   animations: PersonaAnimationSettings[];
+  model_lighting: Record<string, PersonaLightingSettings>;
 }
 
 interface PersonaMcpStatus {
@@ -133,6 +143,11 @@ interface Window {
     deleteModel(modelId: string): Promise<PersonaSettingsSnapshot>;
     setDefaultModel(modelId: string): Promise<PersonaSettingsSnapshot>;
     setCharacterSize(size: number): Promise<PersonaSettingsSnapshot>;
+    setModelLighting(
+      modelId: string,
+      lighting: Partial<PersonaLightingSettings>,
+    ): Promise<PersonaSettingsSnapshot>;
+    resetModelLighting(modelId: string): Promise<PersonaSettingsSnapshot>;
     getMcpStatus(): Promise<PersonaMcpStatus>;
     setWindowTheme(theme: 'light' | 'dark'): void;
     subscribe(
