@@ -42,6 +42,8 @@ contextBridge.exposeInMainWorld("personaSettings", {
     ipcRenderer.invoke("persona:settings-set-default-model", modelId),
   setCharacterSize: (size) =>
     ipcRenderer.invoke("persona:settings-set-character-size", size),
+  setVoiceSource: (voiceSource) =>
+    ipcRenderer.invoke("persona:settings-set-voice-source", voiceSource),
   setModelLighting: (modelId, lighting) =>
     ipcRenderer.invoke(
       "persona:settings-set-model-lighting",

@@ -213,7 +213,7 @@ test("keeps user library records when migrating the earlier settings schema", (c
   );
 
   const snapshot = createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot();
-  assert.equal(snapshot.schema_version, 3);
+  assert.equal(snapshot.schema_version, 4);
   assert.equal(snapshot.default_model_id, modelId);
   assert.equal(snapshot.character_size, 1.15);
   assert.ok(snapshot.models.some((model) => model.id === modelId));
@@ -531,4 +531,53 @@ test("groups multiple uploaded clips under one action and removes them independe
     () => store.deleteAnimation("system-speaking"),
     /cannot be removed/,
   );
+});
+
+test("persists a custom voice source and migrates older settings to schema 4", (context) => {
+  const { userDataPath, packagedLibraryPath } = fixture(context);
+  const store = createSettingsStore({ userDataPath, packagedLibraryPath });
+  assert.deepEqual(store.getSnapshot().voice_source, {
+    mode: "default",
+    process_pattern: null,
+  });
+
+  let snapshot = store.setVoiceSource({
+    mode: "custom",
+    process_pattern: "  local-tts|open-webui  ",
+  });
+  assert.equal(snapshot.schema_version, 4);
+  assert.deepEqual(snapshot.voice_source, {
+    mode: "custom",
+    process_pattern: "local-tts|open-webui",
+  });
+  assert.throws(
+    () => store.setVoiceSource({ mode: "custom", process_pattern: "[" }),
+    /valid regular expression/,
+  );
+
+  snapshot = store.setVoiceSource({ mode: "default", process_pattern: null });
+  assert.deepEqual(snapshot.voice_source, {
+    mode: "default",
+    process_pattern: null,
+  });
+
+  fs.writeFileSync(
+    path.join(userDataPath, "settings.json"),
+    JSON.stringify({
+      schema_version: 3,
+      models: [],
+      animations: [],
+      animation_clips: {},
+      model_lighting: {},
+    }),
+  );
+  const migrated = createSettingsStore({
+    userDataPath,
+    packagedLibraryPath,
+  }).getSnapshot();
+  assert.equal(migrated.schema_version, 4);
+  assert.deepEqual(migrated.voice_source, {
+    mode: "default",
+    process_pattern: null,
+  });
 });

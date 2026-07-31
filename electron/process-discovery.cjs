@@ -2,10 +2,12 @@
 
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
+const {
+  DEFAULT_VOICE_APP_PATTERN,
+  configuredPattern,
+} = require("./voice-source.cjs");
 
 const execFileAsync = promisify(execFile);
-const DEFAULT_VOICE_APP_PATTERN =
-  /(?:^|[\\/\s._=-])(?:codex(?:-desktop)?|chatgpt|openai(?:-codex)?)(?=$|[\\/\s._=-])/i;
 
 function parseMacProcessList(output) {
   return output
@@ -74,21 +76,12 @@ function selectVoiceProcessTree(processes, {
   };
 }
 
-function configuredPattern(environment = process.env) {
-  const source = environment.PERSONA_TARGET_PROCESS_PATTERN;
-  if (!source) return DEFAULT_VOICE_APP_PATTERN;
-  try {
-    return new RegExp(source, "i");
-  } catch {
-    return DEFAULT_VOICE_APP_PATTERN;
-  }
-}
-
 async function discoverVoiceProcesses({
   platform = process.platform,
   run = execFileAsync,
   environment = process.env,
   ownProcessId = process.pid,
+  pattern = null,
 } = {}) {
   let processes;
   if (platform === "darwin") {
@@ -118,7 +111,7 @@ async function discoverVoiceProcesses({
 
   return selectVoiceProcessTree(processes, {
     ownProcessId,
-    pattern: configuredPattern(environment),
+    pattern: pattern ?? configuredPattern(environment),
   });
 }
 

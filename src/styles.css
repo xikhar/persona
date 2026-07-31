@@ -1315,6 +1315,53 @@ button {
   line-height: 1.55;
 }
 
+.theme-note code {
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+  color: var(--text-secondary);
+  background: var(--fill-subtle);
+  font-size: var(--fs-xs);
+}
+
+.voice-source-panel .theme-segmented {
+  margin-top: 4px;
+}
+
+.voice-pattern-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+
+.voice-pattern-field input {
+  width: 100%;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  outline: none;
+  color: var(--text-primary);
+  background: var(--bg-inset);
+  font-size: var(--fs-md);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  caret-color: var(--accent-text);
+}
+
+.voice-pattern-field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.voice-source-panel .panel-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 16px;
+}
+
 /* --- Character size ----------------------------------------------------- */
 
 .appearance-panel .panel-heading {

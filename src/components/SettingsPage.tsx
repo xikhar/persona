@@ -25,7 +25,7 @@ import {
   type ThemePreference,
 } from '../theme';
 
-type SettingsSection = 'models' | 'animations' | 'appearance' | 'mcp';
+type SettingsSection = 'models' | 'animations' | 'appearance' | 'voice' | 'mcp';
 type LightingNumberField =
   | 'exposure'
   | 'environment_intensity'
@@ -57,6 +57,7 @@ const SECTIONS: Array<{
   { id: 'models', label: 'Models', description: 'Character library' },
   { id: 'animations', label: 'Actions', description: 'Motion library' },
   { id: 'appearance', label: 'Appearance', description: 'Default framing' },
+  { id: 'voice', label: 'Voice', description: 'Audio source' },
   { id: 'mcp', label: 'MCP', description: 'Agent connection' },
 ];
 
@@ -93,6 +94,11 @@ const SECTION_ICONS: Record<SettingsSection, ReactNode> = {
   appearance: (
     <Icon>
       <path d="M2.6 5.6v-2a1 1 0 0 1 1-1h2M10.4 2.6h2a1 1 0 0 1 1 1v2M13.4 10.4v2a1 1 0 0 1-1 1h-2M5.6 13.4h-2a1 1 0 0 1-1-1v-2" />
+    </Icon>
+  ),
+  voice: (
+    <Icon>
+      <path d="M3.2 6.4v3.2M5.4 4.8v6.4M7.6 3.6v8.8M9.8 5.2v5.6M12.8 6.8v2.4" />
     </Icon>
   ),
   mcp: (
@@ -178,6 +184,12 @@ export function SettingsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [mcpStatus, setMcpStatus] = useState<PersonaMcpStatus | null>(null);
   const [mcpLoading, setMcpLoading] = useState(false);
+  const [voiceMode, setVoiceMode] = useState<'default' | 'custom'>(
+    SETTINGS_FALLBACK.voice_source.mode,
+  );
+  const [voicePattern, setVoicePattern] = useState(
+    SETTINGS_FALLBACK.voice_source.process_pattern ?? '',
+  );
   const [confirmation, setConfirmation] =
     useState<ConfirmationRequest | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -207,6 +219,11 @@ export function SettingsPage() {
       .catch((error: unknown) => setNotice(errorMessage(error)));
     return bridge.subscribe(setSettings);
   }, [bridge]);
+
+  useEffect(() => {
+    setVoiceMode(settings.voice_source.mode);
+    setVoicePattern(settings.voice_source.process_pattern ?? '');
+  }, [settings.voice_source.mode, settings.voice_source.process_pattern]);
 
   useEffect(() => {
     setPreviewAnimation((current) => {
@@ -292,6 +309,26 @@ export function SettingsPage() {
     },
     [updateSnapshot],
   );
+
+  const saveVoiceSource = async () => {
+    if (!bridge) return;
+    await run(
+      () =>
+        bridge.setVoiceSource({
+          mode: voiceMode,
+          process_pattern: voiceMode === 'custom' ? voicePattern : null,
+        }),
+      voiceMode === 'custom'
+        ? 'Custom voice source saved. Persona will listen for matching playback.'
+        : 'Voice source reset to ChatGPT and Codex.',
+    );
+  };
+
+  const voiceSourceDirty =
+    voiceMode !== settings.voice_source.mode ||
+    (voiceMode === 'custom'
+      ? voicePattern.trim() !== (settings.voice_source.process_pattern ?? '')
+      : false);
 
   const refreshMcpStatus = useCallback(async () => {
     setMcpLoading(true);
@@ -657,7 +694,11 @@ export function SettingsPage() {
       ? mcpStatus
         ? `${mcpStatus.tools.length} tools · ${mcpStatus.playable_actions.length} playable actions`
         : 'Local agent connection'
-      : `${customModelCount} custom models · ${customAnimationCount} custom actions`;
+      : section === 'voice'
+        ? settings.voice_source.mode === 'custom'
+          ? 'Custom process pattern'
+          : 'ChatGPT / Codex'
+        : `${customModelCount} custom models · ${customAnimationCount} custom actions`;
   const mcpHealth = mcpStatus?.health ?? (mcpLoading ? 'starting' : 'unavailable');
   const mcpServerUrl =
     mcpStatus?.server_url ?? 'http://127.0.0.1:47831/mcp';
@@ -717,7 +758,9 @@ export function SettingsPage() {
             <span className="eyebrow">
               {section === 'mcp'
                 ? 'Local integration'
-                : 'Character configuration'}
+                : section === 'voice'
+                  ? 'Voice output listener'
+                  : 'Character configuration'}
             </span>
             <h1>{SECTIONS.find((item) => item.id === section)?.label}</h1>
           </div>
@@ -1566,6 +1609,92 @@ export function SettingsPage() {
                     type="number"
                     value={previewLighting.exposure}
                   />
+                </div>
+              </section>
+            </>
+          )}
+
+          {section === 'voice' && (
+            <>
+              <section className="settings-panel voice-source-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Automatic audio source</h2>
+                    <p>
+                      Persona listens only to playback from the selected
+                      application and turns its volume into lip sync. It does not
+                      capture the microphone, run models, or send audio anywhere.
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  aria-label="Voice source"
+                  className="theme-segmented"
+                  role="group"
+                >
+                  <button
+                    aria-pressed={voiceMode === 'default'}
+                    data-testid="voice-mode-default"
+                    disabled={busy || !bridge}
+                    onClick={() => setVoiceMode('default')}
+                    type="button"
+                  >
+                    ChatGPT / Codex
+                  </button>
+                  <button
+                    aria-pressed={voiceMode === 'custom'}
+                    data-testid="voice-mode-custom"
+                    disabled={busy || !bridge}
+                    onClick={() => setVoiceMode('custom')}
+                    type="button"
+                  >
+                    Custom pattern
+                  </button>
+                </div>
+
+                {voiceMode === 'custom' && (
+                  <label className="voice-pattern-field">
+                    <span>Process pattern</span>
+                    <input
+                      aria-label="Custom voice process pattern"
+                      data-testid="voice-process-pattern"
+                      disabled={busy || !bridge}
+                      onChange={(event) =>
+                        setVoicePattern(event.currentTarget.value)
+                      }
+                      placeholder="my-voice-app|local-tts"
+                      spellCheck={false}
+                      type="text"
+                      value={voicePattern}
+                    />
+                  </label>
+                )}
+
+                <p className="theme-note">
+                  Use a case-insensitive regular expression that matches the
+                  desktop app playing assistant audio. For fully custom local
+                  pipelines you can also drive Persona through its loopback HTTP
+                  API or <code>persona://</code> URLs. Setting{' '}
+                  <code>PERSONA_TARGET_PROCESS_PATTERN</code> overrides this
+                  setting.
+                </p>
+
+                <div className="panel-actions">
+                  <button
+                    className="primary-button"
+                    data-testid="voice-source-save"
+                    disabled={
+                      busy ||
+                      !bridge ||
+                      !voiceSourceDirty ||
+                      (voiceMode === 'custom' && !voicePattern.trim())
+                    }
+                    onClick={() => void saveVoiceSource()}
+                    type="button"
+                  >
+                    Save voice source
+                  </button>
                 </div>
               </section>
             </>

@@ -58,11 +58,13 @@ class NativeProcessAudioListener {
     pollIntervalMs = 1_500,
     sessionIdleMs = SESSION_IDLE_MS,
     speechReleaseMs = DEFAULT_SPEECH_RELEASE_MS,
+    processPattern = null,
   } = {}) {
     this.platform = platform;
     this.helperPath =
       helperPath ?? resolveNativeHelperPath({ platform, isPackaged, resourcesPath });
     this.processDiscovery = processDiscovery;
+    this.processPattern = processPattern;
     this.spawnProcess = spawnProcess;
     this.onActivity = onActivity;
     this.onDebug = onDebug;
@@ -121,7 +123,10 @@ class NativeProcessAudioListener {
     if (this.stopped || this.pollInFlight) return;
     this.pollInFlight = true;
     try {
-      const processes = await this.processDiscovery({ platform: this.platform });
+      const processes = await this.processDiscovery({
+        platform: this.platform,
+        ...(this.processPattern ? { pattern: this.processPattern } : {}),
+      });
       if (this.stopped) return;
       const selectedPids =
         this.platform === "win32" ? processes.rootPids.slice(0, 1) : processes.pids;

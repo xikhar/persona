@@ -58,12 +58,15 @@ The MCP endpoint uses the same port as the local HTTP API. If
 
 ## Automatic listeners
 
+Listeners attach to the configured voice source (ChatGPT/Codex by default, or a
+custom process pattern from Settings / `PERSONA_TARGET_PROCESS_PATTERN`).
+
 ### Linux
 
-Persona polls the PipeWire graph for a Codex or ChatGPT playback node. It
-attaches `pw-record` to that one stream, calculates RMS amplitude in memory, and
-discards every sample after calculation. The stream remains connected to its
-normal output device.
+Persona polls the PipeWire graph for a playback node that matches the configured
+voice-source pattern. It attaches `pw-record` to that one stream, calculates RMS
+amplitude in memory, and discards every sample after calculation. The stream
+remains connected to its normal output device.
 
 ### Windows
 
@@ -78,11 +81,42 @@ aggregate device for the selected voice process. Persona supports macOS 14.2
 and newer and declares why it requests System Audio Recording permission.
 
 Set `PERSONA_TARGET_PROCESS_PATTERN` to a case-insensitive regular expression
-to target another desktop voice application:
+to target another desktop voice application. This environment variable overrides
+the Voice source chosen in Settings:
 
 ```bash
 PERSONA_TARGET_PROCESS_PATTERN='my-voice-app' persona
 ```
+
+## Voice source settings
+
+Open **Settings → Voice** to choose which application Persona watches for
+automatic lip sync:
+
+- **ChatGPT / Codex** keeps the built-in matcher used by default.
+- **Custom pattern** accepts a case-insensitive regular expression matched
+  against process names and command lines on macOS and Windows, and against
+  PipeWire application identity (plus process ancestry) on Linux.
+
+Persona still calculates only an in-memory output level. It does not capture the
+microphone, run language models, transcribe speech, or send audio over the
+network.
+
+## Local models and voice pipelines
+
+Persona is a visual companion for voice experiences. Local models such as Qwen
+or GPT-OSS run in your own agent or inference stack; Persona animates beside
+them. Three supported shapes:
+
+1. **Process listen.** Point Settings → Voice at the desktop app that plays
+   assistant audio (for example a local TTS player or voice UI). Persona
+   attaches to that process the same way it attaches to ChatGPT or Codex.
+2. **Loopback events.** Have your pipeline POST normalized state and levels to
+   `http://127.0.0.1:47831/events`, or open `persona://speaking?level=…` URLs,
+   when speech starts and ends.
+3. **MCP actions.** Register any compatible MCP client against
+   `http://127.0.0.1:47831/mcp` so the agent can trigger configured animations
+   and window controls while audio still comes from (1) or (2).
 
 ## URL protocol
 

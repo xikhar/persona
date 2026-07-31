@@ -4,11 +4,11 @@ const { execFile, spawn } = require("node:child_process");
 const fs = require("node:fs");
 const { promisify } = require("node:util");
 const { AudioActivityGate, DEFAULT_SPEECH_RELEASE_MS } = require("./audio-activity-gate.cjs");
+const { DEFAULT_VOICE_APP_PATTERN } = require("./voice-source.cjs");
 
 const execFileAsync = promisify(execFile);
 const SPEECH_RELEASE_MS = DEFAULT_SPEECH_RELEASE_MS;
-const CODEX_IDENTITY =
-  /(?:^|[\s./=_-])(?:codex(?:-desktop)?|openai(?:-codex)?|chatgpt)(?:$|[\s./=_-])/i;
+const CODEX_IDENTITY = DEFAULT_VOICE_APP_PATTERN;
 
 function nodeProperties(node) {
   return node?.info?.props ?? {};
@@ -74,7 +74,16 @@ function readProcessInfo(processId) {
   };
 }
 
-function isCodexProcessTree(processId, processReader = readProcessInfo) {
+function identityMatchesPattern(identity, pattern = DEFAULT_VOICE_APP_PATTERN) {
+  pattern.lastIndex = 0;
+  return pattern.test(identity);
+}
+
+function isCodexProcessTree(
+  processId,
+  processReader = readProcessInfo,
+  pattern = DEFAULT_VOICE_APP_PATTERN,
+) {
   let currentId = Number(processId);
   const visited = new Set();
   for (let depth = 0; depth < 10; depth += 1) {
@@ -82,7 +91,7 @@ function isCodexProcessTree(processId, processReader = readProcessInfo) {
     visited.add(currentId);
     try {
       const process = processReader(currentId);
-      if (CODEX_IDENTITY.test(process.identity)) return true;
+      if (identityMatchesPattern(process.identity, pattern)) return true;
       currentId = Number(process.parentId);
     } catch {
       return false;
@@ -91,7 +100,11 @@ function isCodexProcessTree(processId, processReader = readProcessInfo) {
   return false;
 }
 
-function isCodexOutputNode(node, processMatcher = isCodexProcessTree) {
+function isCodexOutputNode(
+  node,
+  processMatcher = null,
+  pattern = DEFAULT_VOICE_APP_PATTERN,
+) {
   if (node?.type !== "PipeWire:Interface:Node") return false;
   const properties = nodeProperties(node);
   if (properties["media.class"] !== "Stream/Output/Audio") return false;
@@ -104,20 +117,32 @@ function isCodexOutputNode(node, processMatcher = isCodexProcessTree) {
   ]
     .filter((value) => value != null)
     .join(" ");
-  if (CODEX_IDENTITY.test(identity)) return true;
+  if (identityMatchesPattern(identity, pattern)) return true;
 
   const processId = properties["application.process.id"];
-  return processId != null && processMatcher(processId);
+  const matcher =
+    processMatcher ??
+    ((candidateId) => isCodexProcessTree(candidateId, readProcessInfo, pattern));
+  return processId != null && matcher(processId);
 }
 
-function findCodexOutputNode(nodes, processMatcher = isCodexProcessTree) {
+function findCodexOutputNode(
+  nodes,
+  processMatcher = null,
+  pattern = DEFAULT_VOICE_APP_PATTERN,
+) {
   const processCache = new Map();
+  const matcher =
+    processMatcher ??
+    ((processId) => isCodexProcessTree(processId, readProcessInfo, pattern));
   const cachedMatcher = (processId) => {
     const key = String(processId);
-    if (!processCache.has(key)) processCache.set(key, processMatcher(processId));
+    if (!processCache.has(key)) processCache.set(key, matcher(processId));
     return processCache.get(key);
   };
-  const matches = nodes.filter((node) => isCodexOutputNode(node, cachedMatcher));
+  const matches = nodes.filter((node) =>
+    isCodexOutputNode(node, cachedMatcher, pattern),
+  );
   return (
     matches.find((node) => node.info?.state === "running") ??
     matches.find((node) => node.info?.state === "idle") ??
@@ -149,7 +174,7 @@ function displayName(node) {
     properties["application.name"] ??
     properties["node.description"] ??
     properties["node.name"] ??
-    "Codex"
+    "Voice app"
   );
 }
 
@@ -162,6 +187,7 @@ class LinuxPipeWireListener {
     onStatus = () => {},
     pollIntervalMs = 750,
     speechReleaseMs = SPEECH_RELEASE_MS,
+    processPattern = DEFAULT_VOICE_APP_PATTERN,
   } = {}) {
     this.onActivity = onActivity;
     this.onDebug = onDebug;
@@ -170,6 +196,7 @@ class LinuxPipeWireListener {
     this.onStatus = onStatus;
     this.pollIntervalMs = pollIntervalMs;
     this.speechReleaseMs = speechReleaseMs;
+    this.processPattern = processPattern ?? DEFAULT_VOICE_APP_PATTERN;
     this.capture = null;
     this.captureSerial = null;
     this.currentNode = null;
@@ -230,7 +257,9 @@ class LinuxPipeWireListener {
               binary: properties["application.process.binary"] ?? null,
               node: properties["node.name"] ?? null,
               processId,
-              processTreeMatches: processId != null && isCodexProcessTree(processId),
+              processTreeMatches:
+                processId != null &&
+                isCodexProcessTree(processId, readProcessInfo, this.processPattern),
               state: candidate.info?.state ?? null,
             };
           });
@@ -240,7 +269,7 @@ class LinuxPipeWireListener {
           this.onDebug(outputNodes);
         }
       }
-      const node = findCodexOutputNode(nodes);
+      const node = findCodexOutputNode(nodes, null, this.processPattern);
       if (node == null) {
         this.detach();
         return;

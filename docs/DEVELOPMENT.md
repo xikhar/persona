@@ -49,12 +49,12 @@ Speaking cannot be edited or removed, but users can add or remove their local
 clips.
 
 The store returns one active snapshot containing the default model, character
-size, merged model records, and merged action records with clip collections.
-Only actions with at least one playable clip appear in the MCP tool description
-and animation listing. Catalog changes refresh connected MCP sessions
-immediately, while every animation request is validated against the current
-store snapshot. Keep the catalog, store, MCP, and asset-contract tests in sync
-when adding fields or changing validation.
+size, merged model records, merged action records with clip collections, and the
+configured voice source. Only actions with at least one playable clip appear in
+the MCP tool description and animation listing. Catalog changes refresh
+connected MCP sessions immediately, while every animation request is validated
+against the current store snapshot. Keep the catalog, store, MCP, and
+asset-contract tests in sync when adding fields or changing validation.
 
 An empty packaged catalog is a supported first-run state. The application opens
 Settings and does not create the avatar window or start the audio listener until
@@ -100,6 +100,13 @@ All operating systems implement:
 level immediately. The body remains in its talking motion for 900 ms of silence
 before returning to listening, preventing sentence gaps from causing abrupt
 animation changes.
+
+Target process matching is shared through `electron/voice-source.cjs`. Settings
+stores a default ChatGPT/Codex mode or a custom regex; `PERSONA_TARGET_PROCESS_PATTERN`
+overrides that value when set. Linux PipeWire identity matching and
+macOS/Windows process discovery both consume the resolved pattern so a Voice
+source change behaves the same on every platform. Changing the setting recreates
+the active listener immediately.
 
 Linux implements the contract directly with PipeWire commands. macOS and
 Windows helpers write newline-delimited JSON to stdout:

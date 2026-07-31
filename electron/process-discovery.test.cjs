@@ -50,6 +50,27 @@ test("supports a custom target application pattern without accepting invalid reg
   assert.equal(configuredPattern({ PERSONA_TARGET_PROCESS_PATTERN: "[" }).test("Codex"), true);
 });
 
+test("selects processes with an explicit pattern override", () => {
+  const selected = selectVoiceProcessTree(
+    [
+      {
+        pid: 50,
+        parentId: 1,
+        name: "local-tts",
+        command: "/usr/bin/local-tts",
+      },
+      {
+        pid: 51,
+        parentId: 1,
+        name: "Codex",
+        command: "/Applications/Codex.app/Contents/MacOS/Codex",
+      },
+    ],
+    { ownProcessId: 999, pattern: /local-tts/i },
+  );
+  assert.deepEqual(selected, { pids: [50], rootPids: [50] });
+});
+
 test("does not confuse Persona's project path with the Codex application", () => {
   const selected = selectVoiceProcessTree(
     [

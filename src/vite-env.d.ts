@@ -69,6 +69,11 @@ interface PersonaAnimationClipSettings {
   asset_url: string;
 }
 
+interface PersonaVoiceSourceSettings {
+  mode: 'default' | 'custom';
+  process_pattern: string | null;
+}
+
 interface PersonaSettingsSnapshot {
   schema_version: number;
   default_model_id: string | null;
@@ -77,6 +82,7 @@ interface PersonaSettingsSnapshot {
   models: PersonaModelSettings[];
   animations: PersonaAnimationSettings[];
   model_lighting: Record<string, PersonaLightingSettings>;
+  voice_source: PersonaVoiceSourceSettings;
 }
 
 interface PersonaMcpStatus {
@@ -143,6 +149,9 @@ interface Window {
     deleteModel(modelId: string): Promise<PersonaSettingsSnapshot>;
     setDefaultModel(modelId: string): Promise<PersonaSettingsSnapshot>;
     setCharacterSize(size: number): Promise<PersonaSettingsSnapshot>;
+    setVoiceSource(
+      voiceSource: PersonaVoiceSourceSettings,
+    ): Promise<PersonaSettingsSnapshot>;
     setModelLighting(
       modelId: string,
       lighting: Partial<PersonaLightingSettings>,

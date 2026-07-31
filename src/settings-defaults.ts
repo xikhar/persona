@@ -82,13 +82,17 @@ export function resolveLightingSettings(
 }
 
 export const SETTINGS_FALLBACK: PersonaSettingsSnapshot = {
-  schema_version: 3,
+  schema_version: 4,
   default_model_id: null,
   character_size: 1,
   packaged_animation_change_count: 0,
   models: [],
   animations: SYSTEM_ACTIONS,
   model_lighting: {},
+  voice_source: {
+    mode: 'default',
+    process_pattern: null,
+  },
 };
 
 function packagedAssetUrl(relativePath: string): string {

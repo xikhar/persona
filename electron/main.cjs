@@ -33,6 +33,10 @@ const { parseProtocolUrl, voiceState } = require("./protocol-actions.cjs");
 const {
   createSettingsWindowPresentationGate,
 } = require("./settings-window-presentation.cjs");
+const {
+  resolveVoiceSourcePattern,
+  settingsPatternFromVoiceSource,
+} = require("./voice-source.cjs");
 
 const WINDOW_WIDTH = 430;
 const WINDOW_HEIGHT = 680;
@@ -408,6 +412,49 @@ function publishSettings(snapshot) {
   return snapshot;
 }
 
+function resolveListenerProcessPattern(snapshot = settingsStore?.getSnapshot()) {
+  return resolveVoiceSourcePattern({
+    environment: process.env,
+    settingsPattern: settingsPatternFromVoiceSource(snapshot?.voice_source),
+  });
+}
+
+function createConfiguredAudioListener() {
+  return createAudioListener({
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    processPattern: resolveListenerProcessPattern(),
+    onActivity: (activity) => {
+      debugLog("listener activity", activity);
+      handleBridgeEvent(voiceState(activity));
+    },
+    onDebug: debugEnabled ? (nodes) => debugLog("listener output nodes", nodes) : null,
+    onLevel: (level) => handleBridgeEvent({ type: "audio-level", level }),
+    onSession: (active) => {
+      debugLog("listener session", active);
+      handleBridgeEvent(voiceState(active ? "listening" : "idle", active ? "active" : "inactive"));
+    },
+    onStatus: (status) => {
+      debugLog("listener status", status);
+      handleListenerStatus(status);
+    },
+  });
+}
+
+function restartAudioListener() {
+  audioListener?.stop();
+  audioListener = createConfiguredAudioListener();
+  if (audioListener && modelConfigured) void audioListener.start();
+  if (!audioListener) {
+    handleListenerStatus({
+      available: false,
+      capturing: false,
+      monitoring: false,
+      source: null,
+    });
+  }
+}
+
 function playConfiguredAnimation(animationName) {
   if (!hasConfiguredModel()) return false;
   const installedAnimation = settingsStore?.getAnimation(animationName);
@@ -715,6 +762,11 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle("persona:settings-set-character-size", (_event, size) =>
       publishSettings(settingsStore.setCharacterSize(size)),
     );
+    ipcMain.handle("persona:settings-set-voice-source", (_event, voiceSource) => {
+      const snapshot = publishSettings(settingsStore.setVoiceSource(voiceSource));
+      restartAudioListener();
+      return snapshot;
+    });
     ipcMain.handle(
       "persona:settings-set-model-lighting",
       (_event, modelId, lighting) =>
@@ -785,24 +837,7 @@ if (!app.requestSingleInstanceLock()) {
     globalShortcut.register("CommandOrControl+Shift+A", toggleOverlay);
     handleProtocolArgv(process.argv);
 
-    audioListener = createAudioListener({
-      isPackaged: app.isPackaged,
-      resourcesPath: process.resourcesPath,
-      onActivity: (activity) => {
-        debugLog("listener activity", activity);
-        handleBridgeEvent(voiceState(activity));
-      },
-      onDebug: debugEnabled ? (nodes) => debugLog("listener output nodes", nodes) : null,
-      onLevel: (level) => handleBridgeEvent({ type: "audio-level", level }),
-      onSession: (active) => {
-        debugLog("listener session", active);
-        handleBridgeEvent(voiceState(active ? "listening" : "idle", active ? "active" : "inactive"));
-      },
-      onStatus: (status) => {
-        debugLog("listener status", status);
-        handleListenerStatus(status);
-      },
-    });
+    audioListener = createConfiguredAudioListener();
     if (audioListener && modelConfigured) void audioListener.start();
     if (!audioListener) {
       handleListenerStatus({

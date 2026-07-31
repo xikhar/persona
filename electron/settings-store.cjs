@@ -9,8 +9,13 @@ const {
   inferAnimationType,
   readPackagedLibrary,
 } = require("./library-catalog.cjs");
+const {
+  DEFAULT_VOICE_SOURCE,
+  normalizeVoiceSource,
+  sanitizeVoiceSourcePattern,
+} = require("./voice-source.cjs");
 
-const SETTINGS_SCHEMA_VERSION = 3;
+const SETTINGS_SCHEMA_VERSION = 4;
 const DEFAULT_PACKAGED_LIBRARY_PATH = path.join(
   __dirname,
   "..",
@@ -52,6 +57,7 @@ function defaultState(packagedLibrary) {
     animation_clips: {},
     packaged_animation_overrides: {},
     hidden_packaged_animation_ids: [],
+    voice_source: { ...DEFAULT_VOICE_SOURCE },
   };
 }
 
@@ -331,7 +337,7 @@ function safeReadState(settingsPath, packagedLibrary) {
   const fallback = defaultState(packagedLibrary);
   try {
     const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
-    if (![1, 2, SETTINGS_SCHEMA_VERSION].includes(parsed?.schema_version)) {
+    if (![1, 2, 3, SETTINGS_SCHEMA_VERSION].includes(parsed?.schema_version)) {
       return { migrated: false, state: fallback };
     }
     const { hidden, overrides } = packagedUserLayers(parsed, packagedLibrary);
@@ -340,6 +346,7 @@ function safeReadState(settingsPath, packagedLibrary) {
       ...packagedLibrary.models.map((model) => model.id),
       ...models.map((model) => model.id),
     ]);
+    const voiceSource = normalizeVoiceSource(parsed.voice_source);
     const common = {
       ...fallback,
       default_model_id:
@@ -354,9 +361,28 @@ function safeReadState(settingsPath, packagedLibrary) {
       models,
       packaged_animation_overrides: overrides,
       hidden_packaged_animation_ids: hidden,
+      voice_source: voiceSource,
     };
 
     if (parsed.schema_version !== SETTINGS_SCHEMA_VERSION) {
+      if (parsed.schema_version === 3) {
+        const animations = sanitizeUserAnimations(parsed.animations);
+        const knownAnimationIds = new Set([
+          ...packagedLibrary.animations.map((animation) => animation.id),
+          ...animations.map((animation) => animation.id),
+        ]);
+        return {
+          migrated: true,
+          state: {
+            ...common,
+            animations,
+            animation_clips: sanitizeAnimationClips(
+              parsed.animation_clips,
+              knownAnimationIds,
+            ),
+          },
+        };
+      }
       const migrated = migrateLegacyAnimations(
         parsed.animations,
         packagedLibrary,
@@ -406,6 +432,7 @@ function createSettingsStore({
   let state = initial.state;
 
   function writeState() {
+    state.schema_version = SETTINGS_SCHEMA_VERSION;
     fs.mkdirSync(userDataPath, { recursive: true });
     const temporaryPath = `${settingsPath}.tmp`;
     fs.writeFileSync(temporaryPath, `${JSON.stringify(state, null, 2)}\n`, {
@@ -552,6 +579,7 @@ function createSettingsStore({
         state.model_lighting,
         modelIds,
       ),
+      voice_source: normalizeVoiceSource(state.voice_source),
     };
   }
 
@@ -801,6 +829,21 @@ function createSettingsStore({
     return getSnapshot();
   }
 
+  function setVoiceSource(value) {
+    const mode = value?.mode === "custom" ? "custom" : "default";
+    if (mode === "default") {
+      state.voice_source = { ...DEFAULT_VOICE_SOURCE };
+      writeState();
+      return getSnapshot();
+    }
+    state.voice_source = {
+      mode: "custom",
+      process_pattern: sanitizeVoiceSourcePattern(value?.process_pattern),
+    };
+    writeState();
+    return getSnapshot();
+  }
+
   function setModelLighting(modelId, lighting) {
     if (!availableModels().some((model) => model.id === modelId)) {
       throw new Error("Selected model is not installed.");
@@ -932,6 +975,7 @@ function createSettingsStore({
     resetPackagedAnimations,
     resolveAssetRequest,
     setCharacterSize,
+    setVoiceSource,
     setDefaultModel,
     setModelLighting,
     resetModelLighting,

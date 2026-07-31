@@ -75,10 +75,10 @@ npm start -- --background
 
 ## Customize Persona
 
-Open **Settings…** from Persona's tray menu to manage the character library.
-You can preview installed models and animation actions together, choose the
-default model, set the character's initial size, and add your own `.vrm` and
-`.vrma` files.
+Open **Settings…** from Persona's tray menu to manage the character library,
+choose the voice audio source, and register MCP. You can preview installed
+models and animation actions together, choose the default model, set the
+character's initial size, and add your own `.vrm` and `.vrma` files.
 
 Until a default model exists, Persona does not create the avatar window or
 start its voice-output listener. The first imported model becomes the default
@@ -112,6 +112,14 @@ New Codex sessions can then ask Persona to play an installed animation, show or
 hide its window, and report whether the local character and voice listener are
 active. Persona remains a separate desktop application; the MCP connection
 only exposes its own visual controls.
+
+## Local voice apps
+
+Persona does not run language models. To use it with a local model stack, open
+**Settings → Voice** and point the automatic listener at the app that plays
+assistant audio, or drive lip sync from your pipeline through the loopback HTTP
+API and `persona://` URLs. Any compatible MCP client can use the same animation
+tools as Codex. See [Integrations](docs/INTEGRATIONS.md).
 
 The window intentionally contains no controls:
 

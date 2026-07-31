@@ -117,6 +117,19 @@ test("calculates and normalizes signed 16-bit PCM amplitude", () => {
   assert.equal(normalizeRms(1), 1);
 });
 
+test("matches a custom process pattern for local voice apps", () => {
+  const localApp = pipeWireNode(50, {
+    "application.name": "Local TTS",
+    "application.process.binary": "local-tts",
+    "media.class": "Stream/Output/Audio",
+    "object.serial": 150,
+  }, "running");
+  const pattern = /local-tts/i;
+  assert.equal(isCodexOutputNode(localApp, null, pattern), true);
+  assert.equal(isCodexOutputNode(localApp), false);
+  assert.equal(findCodexOutputNode([localApp], null, pattern), localApp);
+});
+
 test("does not emit duplicate listener status updates", () => {
   const updates = [];
   const listener = new LinuxPipeWireListener({
