@@ -26,6 +26,20 @@ const MAX_CUSTOM_ANIMATIONS = 100;
 const MAX_CUSTOM_ANIMATION_CLIPS = 300;
 const ASSET_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DEFAULT_MODEL_LIGHTING = Object.freeze({
+  tone_mapping: "none",
+  exposure: 1,
+  environment_enabled: true,
+  environment_intensity: 1,
+  key_light_intensity: Math.PI,
+  ambient_intensity: Math.PI,
+});
+const MODEL_LIGHTING_RANGES = Object.freeze({
+  exposure: [0.1, 3],
+  environment_intensity: [0, 2],
+  key_light_intensity: [0, 4],
+  ambient_intensity: [0, 4],
+});
 
 function defaultState(packagedLibrary) {
   return {
@@ -126,6 +140,65 @@ function sanitizeModels(models) {
       return [];
     }
   });
+}
+
+function roundedLightingNumber(
+  value,
+  [minimum, maximum],
+  defaultValue = null,
+) {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < minimum ||
+    value > maximum
+  ) {
+    return null;
+  }
+  return value === defaultValue
+    ? defaultValue
+    : Math.round(value * 100) / 100;
+}
+
+function completeModelLighting(value) {
+  const source =
+    value != null && typeof value === "object" && !Array.isArray(value)
+      ? value
+      : {};
+  const lighting = { ...DEFAULT_MODEL_LIGHTING };
+  if (source.tone_mapping === "none" || source.tone_mapping === "aces") {
+    lighting.tone_mapping = source.tone_mapping;
+  }
+  if (typeof source.environment_enabled === "boolean") {
+    lighting.environment_enabled = source.environment_enabled;
+  }
+  for (const [field, range] of Object.entries(MODEL_LIGHTING_RANGES)) {
+    const normalized = roundedLightingNumber(
+      source[field],
+      range,
+      DEFAULT_MODEL_LIGHTING[field],
+    );
+    if (normalized != null) lighting[field] = normalized;
+  }
+  return lighting;
+}
+
+function sanitizeModelLighting(modelLighting, knownModelIds) {
+  if (
+    modelLighting == null ||
+    typeof modelLighting !== "object" ||
+    Array.isArray(modelLighting)
+  ) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(modelLighting)
+      .filter(([modelId]) => knownModelIds.has(modelId))
+      .map(([modelId, lighting]) => [
+        modelId,
+        completeModelLighting(lighting),
+      ]),
+  );
 }
 
 function sanitizeUserAnimations(animations) {
@@ -262,6 +335,11 @@ function safeReadState(settingsPath, packagedLibrary) {
       return { migrated: false, state: fallback };
     }
     const { hidden, overrides } = packagedUserLayers(parsed, packagedLibrary);
+    const models = sanitizeModels(parsed.models);
+    const knownModelIds = new Set([
+      ...packagedLibrary.models.map((model) => model.id),
+      ...models.map((model) => model.id),
+    ]);
     const common = {
       ...fallback,
       default_model_id:
@@ -269,11 +347,11 @@ function safeReadState(settingsPath, packagedLibrary) {
           ? parsed.default_model_id
           : fallback.default_model_id,
       character_size: parsed.character_size,
-      model_lighting:
-        parsed.model_lighting && typeof parsed.model_lighting === "object"
-          ? parsed.model_lighting
-          : {},
-      models: sanitizeModels(parsed.models),
+      model_lighting: sanitizeModelLighting(
+        parsed.model_lighting,
+        knownModelIds,
+      ),
+      models,
       packaged_animation_overrides: overrides,
       hidden_packaged_animation_ids: hidden,
     };
@@ -447,6 +525,7 @@ function createSettingsStore({
 
   function getSnapshot() {
     const models = availableModels();
+    const modelIds = new Set(models.map((model) => model.id));
     const defaultModel = models.some(
       (model) => model.id === state.default_model_id,
     )
@@ -469,7 +548,10 @@ function createSettingsStore({
       packaged_animation_change_count: changedPackagedIds.size,
       models,
       animations: availableAnimations(),
-      model_lighting: state.model_lighting ?? {},
+      model_lighting: sanitizeModelLighting(
+        state.model_lighting,
+        modelIds,
+      ),
     };
   }
 
@@ -689,6 +771,7 @@ function createSettingsStore({
       state.default_model_id =
         packagedLibrary.default_model_id ?? state.models[0]?.id ?? null;
     }
+    delete state.model_lighting[modelId];
     writeState();
     return getSnapshot();
   }
@@ -719,14 +802,17 @@ function createSettingsStore({
   }
 
   function setModelLighting(modelId, lighting) {
-    if (typeof modelId !== "string" || modelId.trim() === "") {
-      throw new Error("modelId is required.");
+    if (!availableModels().some((model) => model.id === modelId)) {
+      throw new Error("Selected model is not installed.");
     }
-    if (!lighting || typeof lighting !== "object") {
+    if (
+      !lighting ||
+      typeof lighting !== "object" ||
+      Array.isArray(lighting)
+    ) {
       throw new Error("lighting must be an object.");
     }
-    const current = state.model_lighting[modelId] ?? {};
-    const merged = { ...current };
+    const merged = completeModelLighting(state.model_lighting[modelId]);
     if (lighting.tone_mapping !== undefined) {
       if (lighting.tone_mapping !== "none" && lighting.tone_mapping !== "aces") {
         throw new Error("tone_mapping must be 'none' or 'aces'.");
@@ -734,35 +820,54 @@ function createSettingsStore({
       merged.tone_mapping = lighting.tone_mapping;
     }
     if (lighting.exposure !== undefined) {
-      const v = Number(lighting.exposure);
-      if (!Number.isFinite(v) || v < 0.1 || v > 5) {
-        throw new Error("exposure must be between 0.1 and 5.");
+      const value = roundedLightingNumber(
+        lighting.exposure,
+        MODEL_LIGHTING_RANGES.exposure,
+        DEFAULT_MODEL_LIGHTING.exposure,
+      );
+      if (value == null) {
+        throw new Error("exposure must be between 0.1 and 3.");
       }
-      merged.exposure = Math.round(v * 100) / 100;
+      merged.exposure = value;
     }
     if (lighting.environment_enabled !== undefined) {
-      merged.environment_enabled = Boolean(lighting.environment_enabled);
+      if (typeof lighting.environment_enabled !== "boolean") {
+        throw new Error("environment_enabled must be a boolean.");
+      }
+      merged.environment_enabled = lighting.environment_enabled;
     }
     if (lighting.environment_intensity !== undefined) {
-      const v = Number(lighting.environment_intensity);
-      if (!Number.isFinite(v) || v < 0 || v > 5) {
-        throw new Error("environment_intensity must be between 0 and 5.");
+      const value = roundedLightingNumber(
+        lighting.environment_intensity,
+        MODEL_LIGHTING_RANGES.environment_intensity,
+        DEFAULT_MODEL_LIGHTING.environment_intensity,
+      );
+      if (value == null) {
+        throw new Error("environment_intensity must be between 0 and 2.");
       }
-      merged.environment_intensity = Math.round(v * 100) / 100;
+      merged.environment_intensity = value;
     }
     if (lighting.key_light_intensity !== undefined) {
-      const v = Number(lighting.key_light_intensity);
-      if (!Number.isFinite(v) || v < 0 || v > 10) {
-        throw new Error("key_light_intensity must be between 0 and 10.");
+      const value = roundedLightingNumber(
+        lighting.key_light_intensity,
+        MODEL_LIGHTING_RANGES.key_light_intensity,
+        DEFAULT_MODEL_LIGHTING.key_light_intensity,
+      );
+      if (value == null) {
+        throw new Error("key_light_intensity must be between 0 and 4.");
       }
-      merged.key_light_intensity = Math.round(v * 100) / 100;
+      merged.key_light_intensity = value;
     }
     if (lighting.ambient_intensity !== undefined) {
-      const v = Number(lighting.ambient_intensity);
-      if (!Number.isFinite(v) || v < 0 || v > 10) {
-        throw new Error("ambient_intensity must be between 0 and 10.");
+      const value = roundedLightingNumber(
+        lighting.ambient_intensity,
+        MODEL_LIGHTING_RANGES.ambient_intensity,
+        DEFAULT_MODEL_LIGHTING.ambient_intensity,
+      );
+      if (value == null) {
+        throw new Error("ambient_intensity must be between 0 and 4.");
       }
-      merged.ambient_intensity = Math.round(v * 100) / 100;
+      merged.ambient_intensity = value;
     }
     state.model_lighting[modelId] = merged;
     writeState();
@@ -770,8 +875,8 @@ function createSettingsStore({
   }
 
   function resetModelLighting(modelId) {
-    if (typeof modelId !== "string" || modelId.trim() === "") {
-      throw new Error("modelId is required.");
+    if (!availableModels().some((model) => model.id === modelId)) {
+      throw new Error("Selected model is not installed.");
     }
     delete state.model_lighting[modelId];
     writeState();
@@ -836,6 +941,7 @@ function createSettingsStore({
 
 module.exports = {
   ANIMATION_NAME_PATTERN,
+  DEFAULT_MODEL_LIGHTING,
   DEFAULT_PACKAGED_LIBRARY_PATH,
   MAX_CHARACTER_SIZE,
   MIN_CHARACTER_SIZE,

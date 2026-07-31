@@ -6,6 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const {
+  DEFAULT_MODEL_LIGHTING,
   createSettingsStore,
   validateAnimationMetadata,
   validateGlbFile,
@@ -322,6 +323,118 @@ test("validates custom metadata, files, duplicates, and character size", (contex
     () => validateGlbFile(invalidModel, ".vrm"),
     /empty or invalid|glTF/,
   );
+});
+
+test("stores complete independent lighting profiles and enforces UI ranges", (context) => {
+  const { root, userDataPath } = fixture(context);
+  const packagedLibraryPath = writePackagedLibrary(root);
+  const sourceModel = path.join(root, "lighting-model.vrm");
+  writeGlb(sourceModel);
+  const store = createSettingsStore({ userDataPath, packagedLibraryPath });
+  let snapshot = store.importModel({
+    filePath: sourceModel,
+    model_name: "Lighting model",
+  });
+  const userModel = snapshot.models.find(
+    (model) => model.model_name === "Lighting model",
+  );
+  assert.ok(userModel);
+
+  snapshot = store.setModelLighting("configured-model", {
+    environment_intensity: 0.35,
+  });
+  assert.deepEqual(snapshot.model_lighting["configured-model"], {
+    ...DEFAULT_MODEL_LIGHTING,
+    environment_intensity: 0.35,
+  });
+
+  snapshot = store.setModelLighting(userModel.id, {
+    tone_mapping: "aces",
+    exposure: 1.4,
+  });
+  assert.deepEqual(snapshot.model_lighting[userModel.id], {
+    ...DEFAULT_MODEL_LIGHTING,
+    tone_mapping: "aces",
+    exposure: 1.4,
+  });
+  assert.equal(
+    snapshot.model_lighting["configured-model"].environment_intensity,
+    0.35,
+  );
+
+  for (const lighting of [
+    { exposure: 3.01 },
+    { environment_intensity: 2.01 },
+    { key_light_intensity: 4.01 },
+    { ambient_intensity: 4.01 },
+    { environment_enabled: "false" },
+  ]) {
+    assert.throws(
+      () => store.setModelLighting("configured-model", lighting),
+      /must be between|must be a boolean/,
+    );
+  }
+  assert.throws(
+    () => store.setModelLighting("missing-model", { exposure: 1 }),
+    /not installed/,
+  );
+
+  const reloadedStore = createSettingsStore({
+    userDataPath,
+    packagedLibraryPath,
+  });
+  const reloaded = reloadedStore.getSnapshot();
+  assert.deepEqual(
+    reloaded.model_lighting["configured-model"],
+    snapshot.model_lighting["configured-model"],
+  );
+  assert.deepEqual(
+    reloaded.model_lighting[userModel.id],
+    snapshot.model_lighting[userModel.id],
+  );
+
+  snapshot = reloadedStore.deleteModel(userModel.id);
+  assert.equal(snapshot.model_lighting[userModel.id], undefined);
+  snapshot = reloadedStore.resetModelLighting("configured-model");
+  assert.deepEqual(snapshot.model_lighting, {});
+});
+
+test("sanitizes partial and invalid lighting records loaded from disk", (context) => {
+  const { root, userDataPath } = fixture(context);
+  const packagedLibraryPath = writePackagedLibrary(root);
+  fs.mkdirSync(userDataPath, { recursive: true });
+  fs.writeFileSync(
+    path.join(userDataPath, "settings.json"),
+    JSON.stringify({
+      schema_version: 3,
+      model_lighting: {
+        "configured-model": {
+          tone_mapping: "invalid",
+          exposure: 1.25,
+          environment_enabled: "true",
+          environment_intensity: 0.4,
+          key_light_intensity: 8,
+        },
+        "missing-model": {
+          exposure: 2,
+        },
+      },
+      models: [],
+      animations: [],
+    }),
+  );
+
+  const snapshot = createSettingsStore({
+    userDataPath,
+    packagedLibraryPath,
+  }).getSnapshot();
+  assert.deepEqual(snapshot.model_lighting, {
+    "configured-model": {
+      ...DEFAULT_MODEL_LIGHTING,
+      exposure: 1.25,
+      environment_intensity: 0.4,
+    },
+  });
 });
 
 test("migrates reserved legacy uploads into the permanent system actions", (context) => {

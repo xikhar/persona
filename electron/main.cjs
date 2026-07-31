@@ -725,7 +725,7 @@ if (!app.requestSingleInstanceLock()) {
       (_event, modelId) =>
         publishSettings(settingsStore.resetModelLighting(modelId)),
     );
-    ipcMain.handle("persona:settings-get-mcp-status" , () =>
+    ipcMain.handle("persona:settings-get-mcp-status", () =>
       createMcpSettingsStatus({
         error: mcpServerError,
         health: mcpServerHealth,

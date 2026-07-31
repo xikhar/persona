@@ -59,6 +59,28 @@ export const DEFAULT_LIGHTING: PersonaLightingSettings = {
   ambient_intensity: Math.PI,
 };
 
+export function resolveLightingSettings(
+  lighting?: Partial<PersonaLightingSettings> | null,
+): PersonaLightingSettings {
+  return {
+    tone_mapping:
+      lighting?.tone_mapping ?? DEFAULT_LIGHTING.tone_mapping,
+    exposure: lighting?.exposure ?? DEFAULT_LIGHTING.exposure,
+    environment_enabled:
+      lighting?.environment_enabled ??
+      DEFAULT_LIGHTING.environment_enabled,
+    environment_intensity:
+      lighting?.environment_intensity ??
+      DEFAULT_LIGHTING.environment_intensity,
+    key_light_intensity:
+      lighting?.key_light_intensity ??
+      DEFAULT_LIGHTING.key_light_intensity,
+    ambient_intensity:
+      lighting?.ambient_intensity ??
+      DEFAULT_LIGHTING.ambient_intensity,
+  };
+}
+
 export const SETTINGS_FALLBACK: PersonaSettingsSnapshot = {
   schema_version: 3,
   default_model_id: null,

@@ -1455,6 +1455,7 @@ button {
   position: relative;
   width: 40px;
   height: 22px;
+  padding: 0;
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: var(--r-full);
@@ -1481,6 +1482,11 @@ button {
 
 .toggle-switch.active::after {
   transform: translateX(18px);
+}
+
+.toggle-switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .lighting-select-row {
@@ -1515,9 +1521,14 @@ button {
   transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 
-.lighting-reset-button:hover {
+.lighting-reset-button:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--text-primary);
+}
+
+.lighting-panel :is(button, input, select):disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 /* --- MCP ---------------------------------------------------------------- */

@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { Avatar } from './Avatar';
 import type { PlayableAnimationType } from '../animation-catalog';
 import { calculateFullBodyFraming } from '../camera-framing';
-import { DEFAULT_LIGHTING } from '../settings-defaults';
+import { resolveLightingSettings } from '../settings-defaults';
 
 interface SceneProps {
   animation: PlayableAnimationType;
@@ -60,9 +60,7 @@ function LightingController({
       lighting.tone_mapping === 'aces'
         ? THREE.ACESFilmicToneMapping
         : THREE.NoToneMapping;
-    // eslint-disable-next-line react-hooks/immutability
     gl.toneMappingExposure = lighting.exposure;
-    // eslint-disable-next-line react-hooks/immutability
     gl.outputColorSpace = THREE.SRGBColorSpace;
     // eslint-disable-next-line react-hooks/immutability
     scene.environmentIntensity = lighting.environment_enabled
@@ -136,7 +134,7 @@ function FullBodyCamera({
 }
 
 export function Scene(props: SceneProps) {
-  const lighting = props.lighting ?? DEFAULT_LIGHTING;
+  const lighting = resolveLightingSettings(props.lighting);
   const [avatarScene, setAvatarScene] = useState<THREE.Object3D | null>(null);
   const [grounding, setGrounding] = useState<Grounding | null>(null);
   const handleAvatarReady = useCallback((scene: THREE.Object3D) => {

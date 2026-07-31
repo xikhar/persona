@@ -14,7 +14,7 @@ import {
 import {
   loadPackagedSettingsFallback,
   SETTINGS_FALLBACK,
-  DEFAULT_LIGHTING,
+  resolveLightingSettings,
 } from '../settings-defaults';
 import {
   applyTheme,
@@ -26,6 +26,22 @@ import {
 } from '../theme';
 
 type SettingsSection = 'models' | 'animations' | 'appearance' | 'mcp';
+type LightingNumberField =
+  | 'exposure'
+  | 'environment_intensity'
+  | 'key_light_intensity'
+  | 'ambient_intensity';
+
+const LIGHTING_NUMBER_RANGES: Record<
+  LightingNumberField,
+  readonly [number, number]
+> = {
+  exposure: [0.1, 3],
+  environment_intensity: [0, 2],
+  key_light_intensity: [0, 4],
+  ambient_intensity: [0, 4],
+};
+
 interface ConfirmationRequest {
   confirmLabel: string;
   detail: string;
@@ -541,13 +557,16 @@ export function SettingsPage() {
   };
 
   const previewLighting: PersonaLightingSettings = useMemo(() => {
-    if (!selectedModel) return DEFAULT_LIGHTING;
-    return settings.model_lighting[selectedModel.id] ?? DEFAULT_LIGHTING;
+    return resolveLightingSettings(
+      selectedModel ? settings.model_lighting[selectedModel.id] : null,
+    );
   }, [selectedModel, settings.model_lighting]);
 
-  const previewLightingField = (
-    field: keyof PersonaLightingSettings,
-    value: string | number | boolean,
+  const previewLightingField = <
+    Field extends keyof PersonaLightingSettings,
+  >(
+    field: Field,
+    value: PersonaLightingSettings[Field],
   ) => {
     if (!selectedModel) return;
     setSettings((current) => ({
@@ -562,15 +581,58 @@ export function SettingsPage() {
     }));
   };
 
-  const saveLightingField = async (
-    field: keyof PersonaLightingSettings,
-    value: string | number | boolean,
+  const saveLightingField = async <
+    Field extends keyof PersonaLightingSettings,
+  >(
+    field: Field,
+    value: PersonaLightingSettings[Field],
   ) => {
     if (!bridge || !selectedModel) return;
-    await run(
-      () => bridge.setModelLighting(selectedModel.id, { [field]: value }),
+    const snapshot = await run(
+      () =>
+        bridge.setModelLighting(selectedModel.id, {
+          ...previewLighting,
+          [field]: value,
+        }),
       'Lighting updated.',
     );
+    if (snapshot) return;
+    try {
+      updateSnapshot(await bridge.get());
+    } catch {
+      // Keep the original validation error visible.
+    }
+  };
+
+  const lightingNumber = (
+    field: LightingNumberField,
+    input: HTMLInputElement,
+  ) => {
+    const value = input.valueAsNumber;
+    const [minimum, maximum] = LIGHTING_NUMBER_RANGES[field];
+    return Number.isFinite(value) && value >= minimum && value <= maximum
+      ? value
+      : null;
+  };
+
+  const previewLightingNumber = (
+    field: LightingNumberField,
+    input: HTMLInputElement,
+  ) => {
+    const value = lightingNumber(field, input);
+    if (value != null) previewLightingField(field, value);
+  };
+
+  const saveLightingNumber = (
+    field: LightingNumberField,
+    input: HTMLInputElement,
+  ) => {
+    const value = lightingNumber(field, input);
+    if (value == null) {
+      input.value = String(previewLighting[field]);
+      return;
+    }
+    void saveLightingField(field, value);
   };
 
   const resetLighting = async () => {
@@ -1226,6 +1288,7 @@ export function SettingsPage() {
                   </div>
                   <button
                     className="lighting-reset-button"
+                    disabled={busy || !bridge || !selectedModel}
                     onClick={() => void resetLighting()}
                     type="button"
                   >
@@ -1236,9 +1299,13 @@ export function SettingsPage() {
                 <div className="lighting-select-row">
                   <span>Tone mapping</span>
                   <select
+                    disabled={busy || !bridge || !selectedModel}
                     onChange={(e) => {
-                      previewLightingField('tone_mapping', e.target.value);
-                      void saveLightingField('tone_mapping', e.target.value);
+                      const value = e.currentTarget.value as
+                        | 'none'
+                        | 'aces';
+                      previewLightingField('tone_mapping', value);
+                      void saveLightingField('tone_mapping', value);
                     }}
                     value={previewLighting.tone_mapping}
                   >
@@ -1249,24 +1316,17 @@ export function SettingsPage() {
 
                 <div className="lighting-toggle-row">
                   <span>HDR environment</span>
-                  <div
+                  <button
+                    aria-checked={previewLighting.environment_enabled}
                     className={`toggle-switch${previewLighting.environment_enabled ? ' active' : ''}`}
+                    disabled={busy || !bridge || !selectedModel}
                     onClick={() => {
                       const next = !previewLighting.environment_enabled;
                       previewLightingField('environment_enabled', next);
                       void saveLightingField('environment_enabled', next);
                     }}
                     role="switch"
-                    aria-checked={previewLighting.environment_enabled}
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        const next = !previewLighting.environment_enabled;
-                        previewLightingField('environment_enabled', next);
-                        void saveLightingField('environment_enabled', next);
-                      }
-                    }}
+                    type="button"
                   />
                 </div>
 
@@ -1274,10 +1334,27 @@ export function SettingsPage() {
                   <label>
                     <span>Environment intensity</span>
                     <input
+                      disabled={busy || !bridge || !selectedModel}
                       max="2"
                       min="0"
-                      onChange={(e) => previewLightingField('environment_intensity', Number(e.target.value))}
-                      onPointerUp={(e) => void saveLightingField('environment_intensity', Number((e.target as HTMLInputElement).value))}
+                      onChange={(event) =>
+                        previewLightingNumber(
+                          'environment_intensity',
+                          event.currentTarget,
+                        )
+                      }
+                      onKeyUp={(event) =>
+                        saveLightingNumber(
+                          'environment_intensity',
+                          event.currentTarget,
+                        )
+                      }
+                      onPointerUp={(event) =>
+                        saveLightingNumber(
+                          'environment_intensity',
+                          event.currentTarget,
+                        )
+                      }
                       step="0.01"
                       type="range"
                       value={previewLighting.environment_intensity}
@@ -1290,10 +1367,24 @@ export function SettingsPage() {
                   </label>
                   <input
                     className="lighting-value"
+                    disabled={busy || !bridge || !selectedModel}
                     max="2"
                     min="0"
-                    onBlur={(e) => void saveLightingField('environment_intensity', Number(e.target.value))}
-                    onChange={(e) => previewLightingField('environment_intensity', Number(e.target.value))}
+                    onBlur={(event) =>
+                      saveLightingNumber(
+                        'environment_intensity',
+                        event.currentTarget,
+                      )
+                    }
+                    onChange={(event) =>
+                      previewLightingNumber(
+                        'environment_intensity',
+                        event.currentTarget,
+                      )
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur();
+                    }}
                     step="0.01"
                     type="number"
                     value={previewLighting.environment_intensity}
@@ -1304,10 +1395,27 @@ export function SettingsPage() {
                   <label>
                     <span>Key light intensity</span>
                     <input
+                      disabled={busy || !bridge || !selectedModel}
                       max="4"
                       min="0"
-                      onChange={(e) => previewLightingField('key_light_intensity', Number(e.target.value))}
-                      onPointerUp={(e) => void saveLightingField('key_light_intensity', Number((e.target as HTMLInputElement).value))}
+                      onChange={(event) =>
+                        previewLightingNumber(
+                          'key_light_intensity',
+                          event.currentTarget,
+                        )
+                      }
+                      onKeyUp={(event) =>
+                        saveLightingNumber(
+                          'key_light_intensity',
+                          event.currentTarget,
+                        )
+                      }
+                      onPointerUp={(event) =>
+                        saveLightingNumber(
+                          'key_light_intensity',
+                          event.currentTarget,
+                        )
+                      }
                       step="0.01"
                       type="range"
                       value={previewLighting.key_light_intensity}
@@ -1320,10 +1428,24 @@ export function SettingsPage() {
                   </label>
                   <input
                     className="lighting-value"
+                    disabled={busy || !bridge || !selectedModel}
                     max="4"
                     min="0"
-                    onBlur={(e) => void saveLightingField('key_light_intensity', Number(e.target.value))}
-                    onChange={(e) => previewLightingField('key_light_intensity', Number(e.target.value))}
+                    onBlur={(event) =>
+                      saveLightingNumber(
+                        'key_light_intensity',
+                        event.currentTarget,
+                      )
+                    }
+                    onChange={(event) =>
+                      previewLightingNumber(
+                        'key_light_intensity',
+                        event.currentTarget,
+                      )
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur();
+                    }}
                     step="0.01"
                     type="number"
                     value={previewLighting.key_light_intensity}
@@ -1334,10 +1456,27 @@ export function SettingsPage() {
                   <label>
                     <span>Ambient / fill intensity</span>
                     <input
+                      disabled={busy || !bridge || !selectedModel}
                       max="4"
                       min="0"
-                      onChange={(e) => previewLightingField('ambient_intensity', Number(e.target.value))}
-                      onPointerUp={(e) => void saveLightingField('ambient_intensity', Number((e.target as HTMLInputElement).value))}
+                      onChange={(event) =>
+                        previewLightingNumber(
+                          'ambient_intensity',
+                          event.currentTarget,
+                        )
+                      }
+                      onKeyUp={(event) =>
+                        saveLightingNumber(
+                          'ambient_intensity',
+                          event.currentTarget,
+                        )
+                      }
+                      onPointerUp={(event) =>
+                        saveLightingNumber(
+                          'ambient_intensity',
+                          event.currentTarget,
+                        )
+                      }
                       step="0.01"
                       type="range"
                       value={previewLighting.ambient_intensity}
@@ -1350,10 +1489,24 @@ export function SettingsPage() {
                   </label>
                   <input
                     className="lighting-value"
+                    disabled={busy || !bridge || !selectedModel}
                     max="4"
                     min="0"
-                    onBlur={(e) => void saveLightingField('ambient_intensity', Number(e.target.value))}
-                    onChange={(e) => previewLightingField('ambient_intensity', Number(e.target.value))}
+                    onBlur={(event) =>
+                      saveLightingNumber(
+                        'ambient_intensity',
+                        event.currentTarget,
+                      )
+                    }
+                    onChange={(event) =>
+                      previewLightingNumber(
+                        'ambient_intensity',
+                        event.currentTarget,
+                      )
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur();
+                    }}
                     step="0.01"
                     type="number"
                     value={previewLighting.ambient_intensity}
@@ -1364,10 +1517,27 @@ export function SettingsPage() {
                   <label>
                     <span>Exposure</span>
                     <input
+                      disabled={busy || !bridge || !selectedModel}
                       max="3"
                       min="0.1"
-                      onChange={(e) => previewLightingField('exposure', Number(e.target.value))}
-                      onPointerUp={(e) => void saveLightingField('exposure', Number((e.target as HTMLInputElement).value))}
+                      onChange={(event) =>
+                        previewLightingNumber(
+                          'exposure',
+                          event.currentTarget,
+                        )
+                      }
+                      onKeyUp={(event) =>
+                        saveLightingNumber(
+                          'exposure',
+                          event.currentTarget,
+                        )
+                      }
+                      onPointerUp={(event) =>
+                        saveLightingNumber(
+                          'exposure',
+                          event.currentTarget,
+                        )
+                      }
                       step="0.01"
                       type="range"
                       value={previewLighting.exposure}
@@ -1380,10 +1550,18 @@ export function SettingsPage() {
                   </label>
                   <input
                     className="lighting-value"
+                    disabled={busy || !bridge || !selectedModel}
                     max="3"
                     min="0.1"
-                    onBlur={(e) => void saveLightingField('exposure', Number(e.target.value))}
-                    onChange={(e) => previewLightingField('exposure', Number(e.target.value))}
+                    onBlur={(event) =>
+                      saveLightingNumber('exposure', event.currentTarget)
+                    }
+                    onChange={(event) =>
+                      previewLightingNumber('exposure', event.currentTarget)
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur();
+                    }}
                     step="0.01"
                     type="number"
                     value={previewLighting.exposure}

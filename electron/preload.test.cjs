@@ -75,6 +75,11 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
   await settings.deleteModel("model-id");
   await settings.setDefaultModel("model-id");
   await settings.setCharacterSize(1.2);
+  await settings.setModelLighting("model-id", {
+    exposure: 1.2,
+    environment_intensity: 0.35,
+  });
+  await settings.resetModelLighting("model-id");
   await settings.getMcpStatus();
   settings.setWindowTheme("light");
 
@@ -110,6 +115,15 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
     ["persona:settings-delete-model", "model-id"],
     ["persona:settings-set-default-model", "model-id"],
     ["persona:settings-set-character-size", 1.2],
+    [
+      "persona:settings-set-model-lighting",
+      "model-id",
+      {
+        exposure: 1.2,
+        environment_intensity: 0.35,
+      },
+    ],
+    ["persona:settings-reset-model-lighting", "model-id"],
     ["persona:settings-get-mcp-status"],
   ]);
   assert.deepEqual(sent, [
