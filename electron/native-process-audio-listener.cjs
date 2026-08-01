@@ -77,6 +77,7 @@ class NativeProcessAudioListener {
     this.sessionIdleMs = sessionIdleMs;
     this.capture = null;
     this.captureKey = null;
+    this.resolvedPids = new Set();
     this.pollTimer = null;
     this.sessionTimer = null;
     this.sessionActive = false;
@@ -132,16 +133,21 @@ class NativeProcessAudioListener {
         ...(this.processPattern ? { pattern: this.processPattern } : {}),
       });
       if (this.stopped) return;
-      const selectedPids =
-        this.platform === "win32" ? processes.rootPids.slice(0, 1) : processes.pids;
-      const key = selectedPids.join(",");
-      if (!key) {
+      const spawnPids =
+        this.platform === "win32"
+          ? processes.rootPids.slice(0, 1)
+          : processes.pids;
+      if (spawnPids.length === 0) {
         this.detach();
         return;
       }
+      // Key the tap lifecycle on matched roots + the PIDs the native tap
+      // resolved to audio objects, not the full tree — worker churn (#13).
+      const stablePids = this.stableCapturePids(processes);
+      const key = stablePids.join(",");
       if (this.capture && this.captureKey === key) return;
       this.detach({ sessionEnded: false });
-      this.startCapture(selectedPids, key);
+      this.startCapture(spawnPids, key);
     } catch (error) {
       this.reportStatus({
         available: true,
@@ -153,6 +159,18 @@ class NativeProcessAudioListener {
     } finally {
       this.pollInFlight = false;
     }
+  }
+
+  stableCapturePids(processes) {
+    if (this.platform === "win32") {
+      return processes.rootPids.slice(0, 1);
+    }
+    const matched = new Set(processes.pids ?? []);
+    const stable = new Set(processes.rootPids ?? []);
+    for (const pid of this.resolvedPids) {
+      if (matched.has(pid)) stable.add(pid);
+    }
+    return [...stable].sort((left, right) => left - right);
   }
 
   startCapture(processIds, key) {
@@ -173,6 +191,7 @@ class NativeProcessAudioListener {
       if (this.capture !== child) return;
       this.capture = null;
       this.captureKey = null;
+      this.resolvedPids = new Set();
       this.reportStatus({
         available: false,
         capturing: false,
@@ -185,6 +204,7 @@ class NativeProcessAudioListener {
       if (this.capture !== child) return;
       this.capture = null;
       this.captureKey = null;
+      this.resolvedPids = new Set();
       this.gate.reset();
       this.reportStatus({
         available: true,
@@ -201,6 +221,10 @@ class NativeProcessAudioListener {
   handleHelperMessage(child, message) {
     if (this.capture !== child || message == null || typeof message !== "object") return;
     if (message.type === "ready") {
+      const resolved = Array.isArray(message.pids)
+        ? message.pids.filter((pid) => Number.isInteger(pid) && pid > 0)
+        : [];
+      this.resolvedPids = new Set(resolved);
       this.reportStatus({
         available: true,
         capturing: true,
@@ -251,6 +275,7 @@ class NativeProcessAudioListener {
       this.captureKey = null;
       child.kill();
     }
+    if (sessionEnded) this.resolvedPids = new Set();
     this.gate.reset();
     if (sessionEnded) this.endSession();
     this.reportStatus({

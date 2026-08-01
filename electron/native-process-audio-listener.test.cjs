@@ -140,3 +140,51 @@ test("native listener resolves the configured application before capture", async
 
   assert.deepEqual(discoveryOptions.voiceSource, voiceSource);
 });
+
+test("keeps the capture target stable while dynamic worker PIDs churn", async () => {
+  const spawns = [];
+  const children = [];
+  let discovery = { pids: [10, 11], rootPids: [10] };
+  const listener = new NativeProcessAudioListener({
+    platform: "darwin",
+    helperPath: __filename,
+    processDiscovery: async () => discovery,
+    spawnProcess: (_path, args) => {
+      spawns.push(args);
+      const child = fakeChild();
+      children.push(child);
+      return child;
+    },
+  });
+
+  await listener.start();
+  // First spawn uses the full matched tree so the audio service is tapped.
+  assert.deepEqual(spawns[0], ["--pid", "10", "--pid", "11"]);
+
+  // The native tap resolves only the audio-service PID to a Core Audio object.
+  children[0].stdout.emit(
+    "data",
+    '{"type":"ready","source":"macOS process audio","pids":[11]}\n',
+  );
+
+  // Learning the resolved set re-keys once to the stable target [root + resolved].
+  await listener.poll();
+  assert.equal(spawns.length, 2);
+  const stabilized = spawns.length;
+
+  // A dynamic tool worker joining/leaving the matched tree must NOT recreate
+  // the tap once the target has stabilized.
+  discovery = { pids: [10, 11, 12], rootPids: [10] };
+  await listener.poll();
+  discovery = { pids: [10, 11], rootPids: [10] };
+  await listener.poll();
+  assert.equal(spawns.length, stabilized);
+
+  // A real audio-source change (resolved PID leaves the tree) DOES re-attach.
+  discovery = { pids: [10, 13], rootPids: [10] };
+  await listener.poll();
+  assert.equal(spawns.length, stabilized + 1);
+  assert.deepEqual(spawns.at(-1), ["--pid", "10", "--pid", "13"]);
+
+  listener.stop();
+});

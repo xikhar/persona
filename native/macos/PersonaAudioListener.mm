@@ -48,7 +48,9 @@ void handleSignal(int) {
   running.store(false, std::memory_order_relaxed);
 }
 
-std::vector<AudioObjectID> audioProcessObjects(const std::vector<pid_t>& requestedPids) {
+std::vector<AudioObjectID> audioProcessObjects(
+    const std::vector<pid_t>& requestedPids,
+    std::vector<pid_t>* resolvedPids = nullptr) {
   auto address = propertyAddress(kAudioHardwarePropertyProcessObjectList);
   UInt32 size = 0;
   if (AudioObjectGetPropertyDataSize(
@@ -73,6 +75,7 @@ std::vector<AudioObjectID> audioProcessObjects(const std::vector<pid_t>& request
     }
     if (std::find(requestedPids.begin(), requestedPids.end(), pid) != requestedPids.end()) {
       matches.push_back(object);
+      if (resolvedPids != nullptr) resolvedPids->push_back(pid);
     }
   }
   return matches;
@@ -172,7 +175,8 @@ int main(int argc, const char *argv[]) {
     }
     if (processIds.empty()) return fail(@"At least one --pid is required.");
 
-    const auto processObjects = audioProcessObjects(processIds);
+    std::vector<pid_t> resolvedPids;
+    const auto processObjects = audioProcessObjects(processIds, &resolvedPids);
     if (processObjects.empty()) {
       return fail(@"No active Core Audio process matches the requested application.");
     }
@@ -283,7 +287,14 @@ int main(int argc, const char *argv[]) {
 
     signal(SIGINT, handleSignal);
     signal(SIGTERM, handleSignal);
-    emitJSON(@{@"type" : @"ready", @"source" : @"macOS process audio"});
+    NSMutableArray<NSNumber *> *resolvedNumbers =
+        [NSMutableArray arrayWithCapacity:resolvedPids.size()];
+    for (pid_t pid : resolvedPids) [resolvedNumbers addObject:@(pid)];
+    emitJSON(@{
+      @"type" : @"ready",
+      @"source" : @"macOS process audio",
+      @"pids" : resolvedNumbers,
+    });
 
     while (running.load(std::memory_order_relaxed)) {
       std::this_thread::sleep_for(std::chrono::milliseconds(33));
