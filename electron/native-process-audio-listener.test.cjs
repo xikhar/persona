@@ -167,9 +167,9 @@ test("keeps the capture target stable while dynamic worker PIDs churn", async ()
     '{"type":"ready","source":"macOS process audio","pids":[11]}\n',
   );
 
-  // Learning the resolved set re-keys once to the stable target [root + resolved].
+  // Learning the resolved set re-keys the existing capture in place.
   await listener.poll();
-  assert.equal(spawns.length, 2);
+  assert.equal(spawns.length, 1);
   const stabilized = spawns.length;
 
   // A dynamic tool worker joining/leaving the matched tree must NOT recreate
@@ -185,6 +185,14 @@ test("keeps the capture target stable while dynamic worker PIDs churn", async ()
   await listener.poll();
   assert.equal(spawns.length, stabilized + 1);
   assert.deepEqual(spawns.at(-1), ["--pid", "10", "--pid", "13"]);
+
+  // Learning the replacement audio-service PID must not recreate that tap.
+  children.at(-1).stdout.emit(
+    "data",
+    '{"type":"ready","source":"macOS process audio","pids":[13]}\n',
+  );
+  await listener.poll();
+  assert.equal(spawns.length, stabilized + 1);
 
   listener.stop();
 });

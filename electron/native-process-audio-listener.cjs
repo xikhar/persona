@@ -77,6 +77,7 @@ class NativeProcessAudioListener {
     this.sessionIdleMs = sessionIdleMs;
     this.capture = null;
     this.captureKey = null;
+    this.captureRootPids = new Set();
     this.resolvedPids = new Set();
     this.pollTimer = null;
     this.sessionTimer = null;
@@ -147,7 +148,7 @@ class NativeProcessAudioListener {
       const key = stablePids.join(",");
       if (this.capture && this.captureKey === key) return;
       this.detach({ sessionEnded: false });
-      this.startCapture(spawnPids, key);
+      this.startCapture(spawnPids, key, processes.rootPids);
     } catch (error) {
       this.reportStatus({
         available: true,
@@ -173,7 +174,7 @@ class NativeProcessAudioListener {
     return [...stable].sort((left, right) => left - right);
   }
 
-  startCapture(processIds, key) {
+  startCapture(processIds, key, rootPids = []) {
     const args = processIds.flatMap((processId) => ["--pid", String(processId)]);
     const child = this.spawnProcess(this.helperPath, args, {
       stdio: ["ignore", "pipe", "pipe"],
@@ -181,6 +182,7 @@ class NativeProcessAudioListener {
     });
     this.capture = child;
     this.captureKey = key;
+    this.captureRootPids = new Set(rootPids);
     const parse = createNdjsonParser(
       (message) => this.handleHelperMessage(child, message),
       (line) => this.onDebug?.("native listener emitted invalid JSON", line),
@@ -191,6 +193,7 @@ class NativeProcessAudioListener {
       if (this.capture !== child) return;
       this.capture = null;
       this.captureKey = null;
+      this.captureRootPids = new Set();
       this.resolvedPids = new Set();
       this.reportStatus({
         available: false,
@@ -204,6 +207,7 @@ class NativeProcessAudioListener {
       if (this.capture !== child) return;
       this.capture = null;
       this.captureKey = null;
+      this.captureRootPids = new Set();
       this.resolvedPids = new Set();
       this.gate.reset();
       this.reportStatus({
@@ -225,6 +229,11 @@ class NativeProcessAudioListener {
         ? message.pids.filter((pid) => Number.isInteger(pid) && pid > 0)
         : [];
       this.resolvedPids = new Set(resolved);
+      if (this.platform === "darwin") {
+        this.captureKey = [...new Set([...this.captureRootPids, ...resolved])]
+          .sort((left, right) => left - right)
+          .join(",");
+      }
       this.reportStatus({
         available: true,
         capturing: true,
@@ -273,6 +282,7 @@ class NativeProcessAudioListener {
       const child = this.capture;
       this.capture = null;
       this.captureKey = null;
+      this.captureRootPids = new Set();
       child.kill();
     }
     if (sessionEnded) this.resolvedPids = new Set();
