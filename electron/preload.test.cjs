@@ -76,10 +76,12 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
   await settings.setDefaultModel("model-id");
   await settings.setCharacterSize(1.2);
   await settings.setSpeakingTransition({
-    entry_factor: [1.6, 1.6],
-    exit_factor: [1.7, 1.7],
+    entry_ms: [720, 720],
+    exit_ms: [765, 765],
   });
-  await settings.setBodyTransitionSeconds(0.35);
+  await settings.setBodyTransitionMs(800);
+  await settings.setSpeakingDebounceMs(350);
+  await settings.setIdleInterimMs(350);
   await settings.enableDeveloperSettings();
   await settings.resetDeveloperSettings();
   await settings.setVoiceSource({
@@ -129,9 +131,11 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
     ["persona:settings-set-character-size", 1.2],
     [
       "persona:settings-set-speaking-transition",
-      { entry_factor: [1.6, 1.6], exit_factor: [1.7, 1.7] },
+      { entry_ms: [720, 720], exit_ms: [765, 765] },
     ],
-    ["persona:settings-set-body-transition-seconds", 0.35],
+    ["persona:settings-set-body-transition-ms", 800],
+    ["persona:settings-set-speaking-debounce-ms", 350],
+    ["persona:settings-set-idle-interim-ms", 350],
     ["persona:settings-enable-developer"],
     ["persona:settings-reset-developer"],
     [

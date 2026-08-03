@@ -1623,7 +1623,7 @@ button {
   letter-spacing: -0.02em;
 }
 
-.size-slider {
+.single-range-slider {
   display: block;
   width: 100%;
   height: 20px;
@@ -1635,19 +1635,31 @@ button {
   cursor: pointer;
 }
 
-.size-slider::-webkit-slider-runnable-track {
+.single-range-slider::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: var(--r-full);
-  background: var(--bg-raised);
+  background: linear-gradient(
+    to right,
+    var(--accent) 0,
+    var(--accent) var(--range-progress),
+    var(--bg-raised) var(--range-progress),
+    var(--bg-raised) 100%
+  );
 }
 
-.size-slider::-moz-range-track {
+.single-range-slider::-moz-range-track {
   height: 4px;
   border-radius: var(--r-full);
-  background: var(--bg-raised);
+  background: linear-gradient(
+    to right,
+    var(--accent) 0,
+    var(--accent) var(--range-progress),
+    var(--bg-raised) var(--range-progress),
+    var(--bg-raised) 100%
+  );
 }
 
-.size-slider::-webkit-slider-thumb {
+.single-range-slider::-webkit-slider-thumb {
   width: 16px;
   height: 16px;
   margin-top: -6px;
@@ -1660,7 +1672,7 @@ button {
   transition: box-shadow var(--dur) var(--ease);
 }
 
-.size-slider::-moz-range-thumb {
+.single-range-slider::-moz-range-thumb {
   width: 16px;
   height: 16px;
   border: 0;
@@ -1669,15 +1681,31 @@ button {
   box-shadow: var(--slider-thumb-shadow);
 }
 
-.size-slider:hover::-webkit-slider-thumb,
-.size-slider:focus-visible::-webkit-slider-thumb {
+.single-range-slider:hover::-webkit-slider-thumb,
+.single-range-slider:focus-visible::-webkit-slider-thumb {
   box-shadow:
     var(--slider-thumb-shadow),
     0 0 0 5px var(--accent-soft);
 }
 
-.size-slider:active::-webkit-slider-thumb {
+.single-range-slider:hover::-moz-range-thumb,
+.single-range-slider:focus-visible::-moz-range-thumb {
+  box-shadow:
+    var(--slider-thumb-shadow),
+    0 0 0 5px var(--accent-soft);
+}
+
+.single-range-slider:active::-webkit-slider-thumb {
   background: var(--slider-thumb-active);
+}
+
+.single-range-slider:active::-moz-range-thumb {
+  background: var(--slider-thumb-active);
+}
+
+.single-range-slider:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .slider-labels {
@@ -1725,6 +1753,114 @@ button {
 .lighting-row input[type="range"] {
   width: 100%;
   accent-color: var(--accent);
+}
+
+.dual-range-slider {
+  position: relative;
+  width: 100%;
+  height: 20px;
+  margin-top: 2px;
+}
+
+.dual-range-track {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--r-full);
+  background: var(--bg-raised);
+  transform: translateY(-50%);
+}
+
+.dual-range-track i {
+  position: absolute;
+  top: 0;
+  right: calc(100% - var(--range-end));
+  bottom: 0;
+  left: var(--range-start);
+  background: var(--accent);
+}
+
+.lighting-row .dual-range-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  pointer-events: none;
+}
+
+.dual-range-input::-webkit-slider-runnable-track {
+  height: 4px;
+  background: transparent;
+}
+
+.dual-range-input::-moz-range-track {
+  height: 4px;
+  background: transparent;
+}
+
+.dual-range-input::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--slider-thumb);
+  box-shadow: var(--slider-thumb-shadow);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: box-shadow var(--dur) var(--ease);
+}
+
+.dual-range-input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--slider-thumb);
+  box-shadow: var(--slider-thumb-shadow);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.dual-range-input:hover::-webkit-slider-thumb,
+.dual-range-input:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    var(--slider-thumb-shadow),
+    0 0 0 5px var(--accent-soft);
+}
+
+.dual-range-input:focus-visible::-moz-range-thumb {
+  box-shadow:
+    var(--slider-thumb-shadow),
+    0 0 0 5px var(--accent-soft);
+}
+
+.dual-range-input-maximum {
+  z-index: 2;
+}
+
+.dual-range-input-minimum {
+  z-index: 1;
+}
+
+.dual-range-input:disabled::-webkit-slider-thumb {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.dual-range-input:disabled::-moz-range-thumb {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .lighting-value {

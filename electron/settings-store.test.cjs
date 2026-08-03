@@ -77,10 +77,12 @@ test("starts with permanent empty Idle and Speaking actions", (context) => {
 
   assert.equal(snapshot.character_size, 1);
   assert.equal(snapshot.developer_settings_enabled, false);
-  assert.equal(snapshot.body_transition_seconds, 0.35);
+  assert.equal(snapshot.body_transition_ms, 700);
+  assert.equal(snapshot.speaking_debounce_ms, 350);
+  assert.equal(snapshot.idle_interim_ms, 350);
   assert.deepEqual(snapshot.speaking_transition, {
-    entry_factor: [1.5, 1.8],
-    exit_factor: [1.5, 1.8],
+    entry_ms: [810, 945],
+    exit_ms: [630, 855],
   });
   assert.equal(snapshot.packaged_animation_change_count, 0);
   assert.equal(snapshot.default_model_id, null);
@@ -219,7 +221,7 @@ test("keeps user library records when migrating the earlier settings schema", (c
   );
 
   const snapshot = createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot();
-  assert.equal(snapshot.schema_version, 7);
+  assert.equal(snapshot.schema_version, 9);
   assert.equal(snapshot.default_model_id, modelId);
   assert.equal(snapshot.character_size, 1.15);
   assert.ok(snapshot.models.some((model) => model.id === modelId));
@@ -322,27 +324,31 @@ test("validates custom metadata, files, duplicates, and appearance settings", (c
   );
   assert.throws(() => store.setCharacterSize(2), /between/);
   assert.equal(store.setCharacterSize(1.25).character_size, 1.25);
-  assert.throws(() => store.setBodyTransitionSeconds(0.01), /between/);
-  assert.equal(store.setBodyTransitionSeconds(0.4).body_transition_seconds, 0.4);
+  assert.throws(() => store.setBodyTransitionMs(49), /between/);
+  assert.equal(store.setBodyTransitionMs(400).body_transition_ms, 400);
+  assert.throws(() => store.setSpeakingDebounceMs(3001), /between/);
+  assert.equal(store.setSpeakingDebounceMs(650).speaking_debounce_ms, 650);
+  assert.throws(() => store.setIdleInterimMs(-1), /between/);
+  assert.equal(store.setIdleInterimMs(450).idle_interim_ms, 450);
   assert.throws(
     () =>
       store.setSpeakingTransition({
-        entry_factor: [0.09, 1],
-        exit_factor: [1, 1],
+        entry_ms: [44, 450],
+        exit_ms: [450, 450],
       }),
     /between/,
   );
   assert.deepEqual(
     store.setSpeakingTransition({
-      entry_factor: [3.5, 3.5],
-      exit_factor: [1.5, 1.75],
+      entry_ms: [1575, 1575],
+      exit_ms: [675, 788],
     }).speaking_transition,
-    { entry_factor: [3.5, 3.5], exit_factor: [1.5, 1.75] },
+    { entry_ms: [1575, 1575], exit_ms: [675, 788] },
   );
   assert.deepEqual(
     createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot()
       .speaking_transition,
-    { entry_factor: [3.5, 3.5], exit_factor: [1.5, 1.75] },
+    { entry_ms: [1575, 1575], exit_ms: [675, 788] },
   );
   assert.equal(store.enableDeveloperSettings().developer_settings_enabled, true);
   assert.equal(
@@ -351,10 +357,12 @@ test("validates custom metadata, files, duplicates, and appearance settings", (c
     true,
   );
   assert.deepEqual(store.resetDeveloperSettings().speaking_transition, {
-    entry_factor: [1.5, 1.8],
-    exit_factor: [1.5, 1.8],
+    entry_ms: [810, 945],
+    exit_ms: [630, 855],
   });
-  assert.equal(store.getSnapshot().body_transition_seconds, 0.35);
+  assert.equal(store.getSnapshot().body_transition_ms, 700);
+  assert.equal(store.getSnapshot().speaking_debounce_ms, 350);
+  assert.equal(store.getSnapshot().idle_interim_ms, 350);
   assert.equal(store.getSnapshot().developer_settings_enabled, true);
 
   const invalidModel = path.join(root, "invalid.vrm");
@@ -587,7 +595,7 @@ test("persists every voice source mode and migrates schema 4 settings", (context
     mode: "custom",
     process_pattern: "  local-tts|open-webui  ",
   });
-  assert.equal(snapshot.schema_version, 7);
+  assert.equal(snapshot.schema_version, 9);
   assert.deepEqual(snapshot.voice_source, {
     mode: "custom",
     process_pattern: "local-tts|open-webui",
@@ -648,7 +656,7 @@ test("persists every voice source mode and migrates schema 4 settings", (context
     userDataPath,
     packagedLibraryPath,
   }).getSnapshot();
-  assert.equal(migrated.schema_version, 7);
+  assert.equal(migrated.schema_version, 9);
   assert.deepEqual(migrated.voice_source, {
     mode: "custom",
     process_pattern: "voice-engine",
@@ -679,11 +687,71 @@ test("migrates schema 6 into locked developer settings without losing transition
     userDataPath,
     packagedLibraryPath,
   }).getSnapshot();
-  assert.equal(snapshot.schema_version, 7);
+  assert.equal(snapshot.schema_version, 9);
   assert.equal(snapshot.developer_settings_enabled, false);
-  assert.equal(snapshot.body_transition_seconds, 0.35);
+  assert.equal(snapshot.body_transition_ms, 700);
   assert.deepEqual(snapshot.speaking_transition, {
-    entry_factor: [2.5, 2.5],
-    exit_factor: [0.75, 0.75],
+    entry_ms: [1125, 1125],
+    exit_ms: [338, 338],
+  });
+});
+
+test("migrates schema 7 with packaged scheduler delay defaults", (context) => {
+  const { userDataPath, packagedLibraryPath } = fixture(context);
+  fs.mkdirSync(userDataPath, { recursive: true });
+  fs.writeFileSync(
+    path.join(userDataPath, "settings.json"),
+    JSON.stringify({
+      schema_version: 7,
+      models: [],
+      animations: [],
+      animation_clips: {},
+      model_lighting: {},
+      body_transition_seconds: 0.6,
+    }),
+  );
+
+  const snapshot = createSettingsStore({
+    userDataPath,
+    packagedLibraryPath,
+  }).getSnapshot();
+  assert.equal(snapshot.schema_version, 9);
+  assert.equal(snapshot.body_transition_ms, 600);
+  assert.equal(snapshot.speaking_debounce_ms, 350);
+  assert.equal(snapshot.idle_interim_ms, 350);
+});
+
+test("migrates schema 8 scheduler factors and seconds to milliseconds", (context) => {
+  const { userDataPath, packagedLibraryPath } = fixture(context);
+  fs.mkdirSync(userDataPath, { recursive: true });
+  fs.writeFileSync(
+    path.join(userDataPath, "settings.json"),
+    JSON.stringify({
+      schema_version: 8,
+      models: [],
+      animations: [],
+      animation_clips: {},
+      model_lighting: {},
+      body_transition_seconds: 0.8,
+      speaking_debounce_ms: 2150,
+      idle_interim_ms: 0,
+      speaking_transition: {
+        entry_factor: [1.8, 2.1],
+        exit_factor: [1.4, 1.9],
+      },
+    }),
+  );
+
+  const snapshot = createSettingsStore({
+    userDataPath,
+    packagedLibraryPath,
+  }).getSnapshot();
+  assert.equal(snapshot.schema_version, 9);
+  assert.equal(snapshot.body_transition_ms, 800);
+  assert.equal(snapshot.speaking_debounce_ms, 2150);
+  assert.equal(snapshot.idle_interim_ms, 0);
+  assert.deepEqual(snapshot.speaking_transition, {
+    entry_ms: [810, 945],
+    exit_ms: [630, 855],
   });
 });

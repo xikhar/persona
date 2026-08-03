@@ -226,11 +226,20 @@ function rendererUrl(view = null) {
       pathToFileURL(path.join(__dirname, "..", "dist", "index.html")).href,
   );
   if (view) url.searchParams.set("view", view);
+  if (debugEnabled) url.searchParams.set("animationDebug", "1");
   return url.href;
 }
 
 function secureRendererWindow(window, allowedRendererUrl) {
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  if (debugEnabled) {
+    window.webContents.on("console-message", (details) => {
+      const message = details?.message;
+      if (message?.startsWith("[persona:animation]")) {
+        console.error(message);
+      }
+    });
+  }
   window.webContents.on("will-navigate", (event, targetUrl) => {
     if (!isAllowedRendererNavigation(targetUrl, allowedRendererUrl)) {
       event.preventDefault();
@@ -788,9 +797,19 @@ if (!app.requestSingleInstanceLock()) {
         publishSettings(settingsStore.setSpeakingTransition(transition)),
     );
     ipcMain.handle(
-      "persona:settings-set-body-transition-seconds",
-      (_event, seconds) =>
-        publishSettings(settingsStore.setBodyTransitionSeconds(seconds)),
+      "persona:settings-set-body-transition-ms",
+      (_event, milliseconds) =>
+        publishSettings(settingsStore.setBodyTransitionMs(milliseconds)),
+    );
+    ipcMain.handle(
+      "persona:settings-set-speaking-debounce-ms",
+      (_event, milliseconds) =>
+        publishSettings(settingsStore.setSpeakingDebounceMs(milliseconds)),
+    );
+    ipcMain.handle(
+      "persona:settings-set-idle-interim-ms",
+      (_event, milliseconds) =>
+        publishSettings(settingsStore.setIdleInterimMs(milliseconds)),
     );
     ipcMain.handle("persona:settings-enable-developer", () =>
       publishSettings(settingsStore.enableDeveloperSettings()),

@@ -63,36 +63,95 @@ the merged snapshot has a valid `default_model_id`. Importing the first user
 model selects it automatically. Empty Idle or Speaking actions use an empty
 animation URL list, which leaves the VRM in its normal pose.
 
-### Modular speaking motion
+### Animation scheduler
 
-When Speaking has multiple clips, the renderer treats them as conversational
-motion chunks. Each clip plays once, a non-repeating successor is selected at
-random, and the body crossfades between them while the speaking state remains
-active. Speaking chunks use a normalized 900 ms blend. The persisted
-`speaking_transition.entry_factor` and `speaking_transition.exit_factor`
-settings hold inclusive `[minimum, maximum]` ranges that scale the incoming and
-outgoing halves independently. A new factor is sampled from each range for
-every chunk transition. Both packaged ranges default to `[1.5, 1.8]`. A factor
-of `1` is 450 ms per half, `0.1` is 45 ms, and `8` is 3.6 seconds. The weights
-always sum to one, preventing the model's rest pose from leaking through. Lip sync
-continues to follow the live output level independently. A
-short voice pause therefore stops the mouth without interrupting the current
-body sequence.
+The renderer treats every configured Speaking clip as a conversational motion
+chunk. Even a single clip is recycled through a fresh action and a scheduled
+crossfade instead of relying on a potentially discontinuous hard loop.
+`src/animation-scheduler.ts` is the sole owner of action
+lifetimes, clip sequencing, transition weights, silence targets, and one-shot
+completion. Each clip activation receives its own Three.js action, so an
+outgoing clip can never be reset while it still contributes to the current
+pose.
+
+Clip loading is epoch-based: obsolete asynchronous results are discarded. If
+speaking activity changes while the current request is loading, target
+selection is retried against the latest activity revision before any action is
+committed. Once a model is ready, its configured animation library is warmed in
+the background. A speaking onset can use any ready compatible clip immediately
+instead of blocking on the slowest file in the library.
+
+Every transition starts from the exact current action weights. MCP actions can
+replace an in-progress blend without resetting its contributing actions.
+Automatic speaking transitions never overlap one another. The next action is
+preloaded, and its authored clip duration determines when its transition
+becomes eligible. Clips retain their authored playback speed; a slow blend
+never time-warps the incoming motion to force it into the transition window.
+
+`src/animation-motion.ts` caches track interpolants and compares weighted
+humanoid pose and velocity at candidate boundaries. Idle is sampled across its
+loop and starts at the phase closest to the outgoing pose. Speaking selects
+uniformly from chunks not used in the last six activations, then uses the
+compatibility ranking to choose the best phase inside that chunk's small
+opening window. This keeps selection genuinely varied without forcing every
+chunk to begin at a more distant first keyframe.
+Compatibility work is lazy. Short output gaps remain inside Speaking and never
+rank or instantiate an unused Idle action.
+
+The persisted
+`speaking_transition.entry_ms` and `speaking_transition.exit_ms`
+settings hold inclusive `[minimum, maximum]` millisecond ranges for the
+incoming and outgoing halves independently. A new duration is sampled from
+each range for every chunk transition. The packaged entry range defaults to
+`[810, 945]` ms and the exit range defaults to `[630, 855]` ms. The scheduler
+fits that request to the available authored motion when a short clip cannot
+contain two long transitions. Each chunk receives a full-weight interval
+rather than spending its entire lifetime morphing between neighbors. Explicit
+clip weights sum to one during clip-to-clip retargets; the model's rest pose
+participates only when it is the intentional source or target.
+The sampled entry and exit ranges also control MCP-action blends.
+`body_transition_ms` is the global duration for transitions between Idle
+and Speaking. A Speaking action starts on the first active signal and blends
+from Idle over that duration; Speaking-to-Speaking transitions use the sampled
+ranges above.
+Blend weights use a near-linear transfer with lightly softened endpoints. This
+spreads visible pose change across the transition instead of hiding it near the
+ends and producing a fast morph through the middle.
+
+Lip sync follows every live output level independently. Once an integration has
+provided level data, the raw level is authoritative and can start the body and
+face before the coarser speaking-state event arrives; state-only integrations
+fall back to their speaking state. A raw gap starts the scheduler's
+`speaking_debounce_ms` timer, which defaults to 350 ms. Speaking chunks continue
+normally if output returns before it expires. Once it expires, the scheduler
+transitions to Idle immediately. If output returns after that Idle transition
+has begun, the transition is allowed to finish; Idle then plays for
+`idle_interim_ms` (350 ms by default) before the next Speaking chunk begins. An
+empty Idle action targets the model's normal rest pose.
+Host listening or inactive state events never request Idle directly, so they
+cannot discard a Speaking successor while the debounce is still active.
+
+Run Persona with `PERSONA_DEBUG=1` to emit `[persona:animation]` records for
+requests, loads, scheduled boundaries, activity changes, transition starts,
+retargets, completions, and discarded stale work.
 
 The values are stored in Persona's per-user `settings.json` as:
 
 ```json
 "speaking_transition": {
-  "entry_factor": [1.5, 1.8],
-  "exit_factor": [1.5, 1.8]
-}
+  "entry_ms": [810, 945],
+  "exit_ms": [630, 855]
+},
+"speaking_debounce_ms": 350,
+"idle_interim_ms": 350,
+"body_transition_ms": 700
 ```
 
 They can also be changed from the gated Developer tab in the Settings window.
 The warning must be acknowledged once before its controls are available. Valid
-factors range from `0.1` to `8`. Each visible slider sets a fixed range such as
-`[1.6, 1.6]`; Reset developer settings restores the packaged ranges while
-leaving developer access enabled.
+entry and exit durations range from `45` to `3600` ms. Their two-handle sliders
+select the complete random range; Reset developer settings restores the
+packaged ranges while leaving developer access enabled.
 
 ## MCP contract
 
@@ -128,11 +187,14 @@ All operating systems implement:
 - `onLevel(0..1)` for lip movement; and
 - `onStatus(...)` for diagnostics.
 
-`AudioActivityGate` owns the shared short-silence behavior. Lips follow every
-level immediately. The activity gate holds speaking for 250 ms of silence, and
-the renderer waits another 250 ms before returning the body to idle. This keeps
-brief word gaps continuous without extending conversational motion far into a
-real pause.
+`AudioActivityGate` keeps the coarse speaking state stable for integrations and
+holds it for 250 ms of silence. Lips and the renderer scheduler also receive
+every level immediately. The scheduler owns body behavior for those raw gaps:
+Speaking remains active until `speaking_debounce_ms` expires, so its normal
+chunk sequence continues across shorter gaps. A longer gap starts the Idle
+transition. If output resumes after that transition has begun, the scheduler
+finishes the Idle route and its configured interim before returning to a new
+Speaking chunk.
 
 Voice-source validation and stable identities are shared through
 `electron/voice-source.cjs`; discovery lives in
@@ -185,9 +247,12 @@ PipeWire selection and PCM normalization, process discovery on macOS and
 Windows, native NDJSON parsing, shared pause smoothing, listener lifecycle,
 asset safety, and release checksums.
 
-Vitest covers animation priority and configured animation selection. GitHub
-Actions then compiles and self-tests the native helper on its real operating
-system and builds the renderer on all three platforms.
+Vitest covers animation priority and configured animation selection, speech
+signal gating, motion compatibility and variety, transition timing, async
+request replacement, pause debounce, Idle interim handling, one-shot actions,
+and scheduler cleanup. GitHub Actions then compiles and self-tests the native
+helper on its real operating system and builds the renderer on all three
+platforms.
 
 Headless CI cannot create a real Codex voice call or approve operating-system
 audio permissions. Before a release, manually run the checklist in

@@ -28,7 +28,14 @@ describe('Persona animation contract', () => {
         outputMuted: true,
         phase: 'active',
       }),
-    ).toBe('IDLE');
+    ).toBeNull();
+    expect(
+      immediateVoiceAnimation({
+        activity: 'idle',
+        outputMuted: false,
+        phase: 'inactive',
+      }),
+    ).toBeNull();
   });
 
   it('uses no clip for the empty idle pose when no asset is configured', () => {

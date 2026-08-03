@@ -14,13 +14,17 @@ interface AvatarProps {
   animation: PlayableAnimationType;
   animationRequest: number;
   animationUrls?: readonly string[];
+  fallbackAnimationUrls?: readonly string[];
+  preloadAnimationUrls?: readonly string[];
   audioLevel: number;
+  bodySpeaking: boolean;
   modelUrl: string;
   onAnimationComplete: () => void;
   playback: 'loop' | 'once';
-  speakingMotionActive: boolean;
   speaking: boolean;
-  bodyTransitionSeconds: number;
+  bodyTransitionMs: number;
+  speakingDebounceMs: number;
+  idleInterimMs: number;
   speakingTransition: PersonaSpeakingTransitionSettings;
   onReady?: (scene: THREE.Object3D) => void;
 }
@@ -29,13 +33,17 @@ function AvatarModel({
   animation,
   animationRequest,
   animationUrls,
+  fallbackAnimationUrls,
+  preloadAnimationUrls,
   audioLevel,
+  bodySpeaking,
   modelUrl,
   onAnimationComplete,
   playback,
-  speakingMotionActive,
   speaking,
-  bodyTransitionSeconds,
+  bodyTransitionMs,
+  speakingDebounceMs,
+  idleInterimMs,
   speakingTransition,
   onReady,
 }: AvatarProps) {
@@ -43,8 +51,11 @@ function AvatarModel({
   const { play, update: updateAnimation } = useVrmAnimation(
     vrm,
     speakingTransition,
-    bodyTransitionSeconds,
-    speakingMotionActive,
+    bodyTransitionMs,
+    speakingDebounceMs,
+    idleInterimMs,
+    bodySpeaking,
+    preloadAnimationUrls,
   );
   const updateLipSync = useAmplitudeLipSync(vrm);
   const updateBlink = useBlink(vrm);
@@ -54,10 +65,19 @@ function AvatarModel({
     () => JSON.parse(animationUrlsKey) as string[],
     [animationUrlsKey],
   );
+  const fallbackAnimationUrlsKey = animationUrlSignature(
+    fallbackAnimationUrls,
+  );
+  const stableFallbackAnimationUrls = useMemo(
+    () => JSON.parse(fallbackAnimationUrlsKey) as string[],
+    [fallbackAnimationUrlsKey],
+  );
 
   useEffect(() => {
     void play(animation, {
+      animationRequest,
       animationUrls: stableAnimationUrls,
+      fallbackAnimationUrls: stableFallbackAnimationUrls,
       onComplete: onAnimationComplete,
       playback,
     });
@@ -68,6 +88,7 @@ function AvatarModel({
     play,
     playback,
     stableAnimationUrls,
+    stableFallbackAnimationUrls,
   ]);
 
   useLayoutEffect(() => {
@@ -78,7 +99,7 @@ function AvatarModel({
     if (!vrm) return;
     updateAnimation(delta);
     updateBlink(delta);
-    updateLipSync(delta, audioLevel, speaking);
+    updateLipSync(delta, audioLevel, speaking || bodySpeaking);
     vrm.update(delta);
   });
 

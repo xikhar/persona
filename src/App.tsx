@@ -19,6 +19,10 @@ import {
   loadPackagedSettingsFallback,
   SETTINGS_FALLBACK,
 } from './settings-defaults';
+import {
+  BODY_SPEECH_LEVEL_THRESHOLD,
+  bodySpeechSignalActive,
+} from './speech-signal';
 
 const INITIAL_STATE: VoiceState = {
   activity: 'idle',
@@ -26,11 +30,6 @@ const INITIAL_STATE: VoiceState = {
   outputMuted: false,
   phase: 'inactive',
 };
-
-// Keep body motion speaking through normal sentence gaps. Lip sync still
-// follows the live amplitude immediately; this delay only controls when the
-// body is allowed to leave the speaking animation.
-const BODY_IDLE_DELAY_MS = 900;
 
 export function App() {
   const [voice, setVoice] = useState<VoiceState>(INITIAL_STATE);
@@ -51,12 +50,18 @@ export function App() {
     return bridge.subscribe((event) => {
       if (event.type === 'state') {
         setVoice(event.state);
-        if (event.state.phase === 'inactive') {
-          setHasObservedAudioLevel(false);
-        }
+        if (event.state.phase === 'inactive') setHasObservedAudioLevel(false);
       } else if (event.type === 'audio-level') {
         setAudioLevel(event.level);
         setHasObservedAudioLevel(true);
+        // A native level arrives before the coarser activity event. Make the
+        // speaking library available to the scheduler on that first audible
+        // packet instead of waiting for a second renderer pass through the
+        // voice-state gate. Silence remains scheduler-owned and does not flip
+        // this request back to Idle.
+        if (event.level > BODY_SPEECH_LEVEL_THRESHOLD) {
+          setVoiceAnimation('TALK');
+        }
       } else if (event.type === 'animation') {
         if (event.requestId != null) {
           setBodyOverride({
@@ -86,22 +91,15 @@ export function App() {
     voice.phase === 'active' &&
     voice.activity === 'speaking' &&
     !voice.outputMuted;
-  const speakingMotionActive =
-    speaking && (!hasObservedAudioLevel || audioLevel > 0);
-
+  const bodySpeaking = bodySpeechSignalActive({
+    audioLevel,
+    audioLevelObserved: hasObservedAudioLevel,
+    voiceSpeaking: speaking,
+  });
   useEffect(() => {
     const immediateAnimation = immediateVoiceAnimation(voice);
-    if (immediateAnimation != null) {
-      setVoiceAnimation(immediateAnimation);
-      if (immediateAnimation === 'IDLE') setAudioLevel(0);
-      return;
-    }
-
-    const timer = window.setTimeout(
-      () => setVoiceAnimation('IDLE'),
-      BODY_IDLE_DELAY_MS,
-    );
-    return () => window.clearTimeout(timer);
+    if (immediateAnimation != null) setVoiceAnimation(immediateAnimation);
+    if (voice.phase !== 'active' || voice.outputMuted) setAudioLevel(0);
   }, [voice]);
 
   const animation = resolveBodyAnimation(voiceAnimation, bodyOverride);
@@ -118,6 +116,18 @@ export function App() {
   );
   const animationUrls =
     bodyOverride?.animationUrls ?? configuredAnimationUrls;
+  const idleAnimationUrls = useMemo(
+    () => animationUrlsForType(settings.animations, 'IDLE'),
+    [settings.animations],
+  );
+  const preloadAnimationUrls = useMemo(
+    () => [
+      ...new Set(
+        settings.animations.flatMap((configured) => configured.asset_urls),
+      ),
+    ],
+    [settings.animations],
+  );
   const overrideRequestId = bodyOverride?.requestId ?? null;
   const handleAnimationComplete = useCallback(() => {
     if (overrideRequestId == null) return;
@@ -132,15 +142,19 @@ export function App() {
         animation={animation}
         animationRequest={animationRequest}
         animationUrls={animationUrls}
+        fallbackAnimationUrls={idleAnimationUrls}
+        preloadAnimationUrls={preloadAnimationUrls}
         audioLevel={audioLevel}
+        bodySpeaking={bodySpeaking}
         characterSize={settings.character_size}
         lighting={settings.model_lighting[defaultModel.id]}
         modelUrl={defaultModel.asset_url}
         onAnimationComplete={handleAnimationComplete}
         playback={bodyOverride ? 'once' : 'loop'}
-        speakingMotionActive={speakingMotionActive}
         speaking={speaking}
-        bodyTransitionSeconds={settings.body_transition_seconds}
+        bodyTransitionMs={settings.body_transition_ms}
+        speakingDebounceMs={settings.speaking_debounce_ms}
+        idleInterimMs={settings.idle_interim_ms}
         speakingTransition={settings.speaking_transition}
       />
     </main>

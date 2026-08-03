@@ -10,7 +10,8 @@ Persona's first beta is under active development.
   playback-stream selection, cross-platform regex matching, and external events.
 - Transparent desktop presence with manual lifecycle, tray controls, shortcut,
   URL protocol, always-on-top behavior, zoom, orbit, and pan.
-- Short-silence speech holding and smooth animation crossfades.
+- Stateful animation scheduling with varied speaking chunks, configurable
+  short-silence handling, smooth crossfades, and one-shot action recovery.
 - Stable, replaceable model and animation slots with a strict release license
   gate.
 - Linux, Windows, macOS arm64, and macOS x64 validation and release workflows.

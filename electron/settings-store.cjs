@@ -15,7 +15,7 @@ const {
   sanitizeVoiceSource,
 } = require("./voice-source.cjs");
 
-const SETTINGS_SCHEMA_VERSION = 7;
+const SETTINGS_SCHEMA_VERSION = 9;
 const DEFAULT_PACKAGED_LIBRARY_PATH = path.join(
   __dirname,
   "..",
@@ -29,11 +29,16 @@ const MAX_ASSET_BYTES = 200 * 1024 * 1024;
 const MAX_CUSTOM_MODELS = 50;
 const MAX_CUSTOM_ANIMATIONS = 100;
 const MAX_CUSTOM_ANIMATION_CLIPS = 300;
-const MIN_SPEAKING_TRANSITION_FACTOR = 0.1;
-const MAX_SPEAKING_TRANSITION_FACTOR = 8;
-const MIN_BODY_TRANSITION_SECONDS = 0.05;
-const MAX_BODY_TRANSITION_SECONDS = 3;
-const DEFAULT_BODY_TRANSITION_SECONDS = 0.35;
+const LEGACY_SPEAKING_HALF_BASE_MS = 450;
+const MIN_SPEAKING_TRANSITION_MS = 45;
+const MAX_SPEAKING_TRANSITION_MS = 3600;
+const MIN_BODY_TRANSITION_MS = 50;
+const MAX_BODY_TRANSITION_MS = 3000;
+const DEFAULT_BODY_TRANSITION_MS = 700;
+const DEFAULT_SPEAKING_DEBOUNCE_MS = 350;
+const DEFAULT_IDLE_INTERIM_MS = 350;
+const MIN_SCHEDULER_DELAY_MS = 0;
+const MAX_SCHEDULER_DELAY_MS = 3000;
 const ASSET_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_MODEL_LIGHTING = Object.freeze({
@@ -51,14 +56,14 @@ const MODEL_LIGHTING_RANGES = Object.freeze({
   ambient_intensity: [0, 4],
 });
 const DEFAULT_SPEAKING_TRANSITION = Object.freeze({
-  entry_factor: Object.freeze([1.5, 1.8]),
-  exit_factor: Object.freeze([1.5, 1.8]),
+  entry_ms: Object.freeze([810, 945]),
+  exit_ms: Object.freeze([630, 855]),
 });
 
 function defaultSpeakingTransition() {
   return {
-    entry_factor: [...DEFAULT_SPEAKING_TRANSITION.entry_factor],
-    exit_factor: [...DEFAULT_SPEAKING_TRANSITION.exit_factor],
+    entry_ms: [...DEFAULT_SPEAKING_TRANSITION.entry_ms],
+    exit_ms: [...DEFAULT_SPEAKING_TRANSITION.exit_ms],
   };
 }
 
@@ -70,41 +75,74 @@ function sanitizeTransitionRange(value, fallback) {
   if (
     !Number.isFinite(minimum) ||
     !Number.isFinite(maximum) ||
-    minimum < MIN_SPEAKING_TRANSITION_FACTOR ||
-    maximum > MAX_SPEAKING_TRANSITION_FACTOR ||
+    minimum < MIN_SPEAKING_TRANSITION_MS ||
+    maximum > MAX_SPEAKING_TRANSITION_MS ||
     minimum > maximum
   ) {
     return [...fallback];
   }
   return [
-    Math.round(minimum * 100) / 100,
-    Math.round(maximum * 100) / 100,
+    Math.round(minimum),
+    Math.round(maximum),
   ];
 }
 
 function sanitizeSpeakingTransition(value) {
   return {
-    entry_factor: sanitizeTransitionRange(
-      value?.entry_factor,
-      DEFAULT_SPEAKING_TRANSITION.entry_factor,
+    entry_ms: sanitizeTransitionRange(
+      value?.entry_ms,
+      DEFAULT_SPEAKING_TRANSITION.entry_ms,
     ),
-    exit_factor: sanitizeTransitionRange(
-      value?.exit_factor,
-      DEFAULT_SPEAKING_TRANSITION.exit_factor,
+    exit_ms: sanitizeTransitionRange(
+      value?.exit_ms,
+      DEFAULT_SPEAKING_TRANSITION.exit_ms,
     ),
   };
 }
 
-function sanitizeBodyTransitionSeconds(value) {
-  const seconds = Number(value);
+function sanitizeBodyTransitionMs(value) {
+  const milliseconds = Number(value);
   if (
-    !Number.isFinite(seconds) ||
-    seconds < MIN_BODY_TRANSITION_SECONDS ||
-    seconds > MAX_BODY_TRANSITION_SECONDS
+    !Number.isFinite(milliseconds) ||
+    milliseconds < MIN_BODY_TRANSITION_MS ||
+    milliseconds > MAX_BODY_TRANSITION_MS
   ) {
-    return DEFAULT_BODY_TRANSITION_SECONDS;
+    return DEFAULT_BODY_TRANSITION_MS;
   }
-  return Math.round(seconds * 100) / 100;
+  return Math.round(milliseconds);
+}
+
+function migrateLegacySpeakingTransition(value) {
+  const convert = (range, fallback) => {
+    const candidate = Array.isArray(range) ? range : [range, range];
+    if (candidate.length !== 2) return [...fallback];
+    return sanitizeTransitionRange(
+      candidate.map((factor) => Number(factor) * LEGACY_SPEAKING_HALF_BASE_MS),
+      fallback,
+    );
+  };
+  return {
+    entry_ms: convert(
+      value?.entry_factor,
+      DEFAULT_SPEAKING_TRANSITION.entry_ms,
+    ),
+    exit_ms: convert(
+      value?.exit_factor,
+      DEFAULT_SPEAKING_TRANSITION.exit_ms,
+    ),
+  };
+}
+
+function sanitizeSchedulerDelayMs(value, fallback) {
+  const milliseconds = Number(value);
+  if (
+    !Number.isFinite(milliseconds) ||
+    milliseconds < MIN_SCHEDULER_DELAY_MS ||
+    milliseconds > MAX_SCHEDULER_DELAY_MS
+  ) {
+    return fallback;
+  }
+  return Math.round(milliseconds);
 }
 
 function defaultState(packagedLibrary) {
@@ -113,7 +151,9 @@ function defaultState(packagedLibrary) {
     default_model_id: packagedLibrary.default_model_id,
     character_size: 1,
     developer_settings_enabled: false,
-    body_transition_seconds: DEFAULT_BODY_TRANSITION_SECONDS,
+    body_transition_ms: DEFAULT_BODY_TRANSITION_MS,
+    speaking_debounce_ms: DEFAULT_SPEAKING_DEBOUNCE_MS,
+    idle_interim_ms: DEFAULT_IDLE_INTERIM_MS,
     speaking_transition: defaultSpeakingTransition(),
     model_lighting: {},
     models: [],
@@ -401,9 +441,10 @@ function safeReadState(settingsPath, packagedLibrary) {
   const fallback = defaultState(packagedLibrary);
   try {
     const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
-    if (![1, 2, 3, 4, 5, 6, SETTINGS_SCHEMA_VERSION].includes(parsed?.schema_version)) {
+    if (![1, 2, 3, 4, 5, 6, 7, 8, SETTINGS_SCHEMA_VERSION].includes(parsed?.schema_version)) {
       return { migrated: false, state: fallback };
     }
+    const usesLegacySchedulerUnits = parsed.schema_version <= 8;
     const { hidden, overrides } = packagedUserLayers(parsed, packagedLibrary);
     const models = sanitizeModels(parsed.models);
     const knownModelIds = new Set([
@@ -419,12 +460,22 @@ function safeReadState(settingsPath, packagedLibrary) {
           : fallback.default_model_id,
       character_size: parsed.character_size,
       developer_settings_enabled: parsed.developer_settings_enabled === true,
-      body_transition_seconds: sanitizeBodyTransitionSeconds(
-        parsed.body_transition_seconds,
+      body_transition_ms: sanitizeBodyTransitionMs(
+        usesLegacySchedulerUnits
+          ? Number(parsed.body_transition_seconds) * 1000
+          : parsed.body_transition_ms,
       ),
-      speaking_transition: sanitizeSpeakingTransition(
-        parsed.speaking_transition,
+      speaking_debounce_ms: sanitizeSchedulerDelayMs(
+        parsed.speaking_debounce_ms,
+        DEFAULT_SPEAKING_DEBOUNCE_MS,
       ),
+      idle_interim_ms: sanitizeSchedulerDelayMs(
+        parsed.idle_interim_ms,
+        DEFAULT_IDLE_INTERIM_MS,
+      ),
+      speaking_transition: usesLegacySchedulerUnits
+        ? migrateLegacySpeakingTransition(parsed.speaking_transition)
+        : sanitizeSpeakingTransition(parsed.speaking_transition),
       model_lighting: sanitizeModelLighting(
         parsed.model_lighting,
         knownModelIds,
@@ -436,7 +487,7 @@ function safeReadState(settingsPath, packagedLibrary) {
     };
 
     if (parsed.schema_version !== SETTINGS_SCHEMA_VERSION) {
-      if ([3, 4, 5, 6].includes(parsed.schema_version)) {
+      if ([3, 4, 5, 6, 7, 8].includes(parsed.schema_version)) {
         const animations = sanitizeUserAnimations(parsed.animations);
         const knownAnimationIds = new Set([
           ...packagedLibrary.animations.map((animation) => animation.id),
@@ -644,8 +695,16 @@ function createSettingsStore({
           ? characterSize
           : 1,
       developer_settings_enabled: state.developer_settings_enabled === true,
-      body_transition_seconds: sanitizeBodyTransitionSeconds(
-        state.body_transition_seconds,
+      body_transition_ms: sanitizeBodyTransitionMs(
+        state.body_transition_ms,
+      ),
+      speaking_debounce_ms: sanitizeSchedulerDelayMs(
+        state.speaking_debounce_ms,
+        DEFAULT_SPEAKING_DEBOUNCE_MS,
+      ),
+      idle_interim_ms: sanitizeSchedulerDelayMs(
+        state.idle_interim_ms,
+        DEFAULT_IDLE_INTERIM_MS,
       ),
       speaking_transition: sanitizeSpeakingTransition(
         state.speaking_transition,
@@ -911,21 +970,21 @@ function createSettingsStore({
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       throw new Error("Speaking transition settings must be an object.");
     }
-    for (const field of ["entry_factor", "exit_factor"]) {
+    for (const field of ["entry_ms", "exit_ms"]) {
       const range = value[field];
       if (
         !Array.isArray(range) ||
         range.length !== 2 ||
         range.some(
-          (factor) =>
-            !Number.isFinite(Number(factor)) ||
-            Number(factor) < MIN_SPEAKING_TRANSITION_FACTOR ||
-            Number(factor) > MAX_SPEAKING_TRANSITION_FACTOR,
+          (milliseconds) =>
+            !Number.isFinite(Number(milliseconds)) ||
+            Number(milliseconds) < MIN_SPEAKING_TRANSITION_MS ||
+            Number(milliseconds) > MAX_SPEAKING_TRANSITION_MS,
         ) ||
         Number(range[0]) > Number(range[1])
       ) {
         throw new Error(
-          `Speaking transition ranges must contain two ordered factors between ${MIN_SPEAKING_TRANSITION_FACTOR} and ${MAX_SPEAKING_TRANSITION_FACTOR}.`,
+          `Speaking transition ranges must contain two ordered millisecond values between ${MIN_SPEAKING_TRANSITION_MS} and ${MAX_SPEAKING_TRANSITION_MS}.`,
         );
       }
     }
@@ -934,18 +993,42 @@ function createSettingsStore({
     return getSnapshot();
   }
 
-  function setBodyTransitionSeconds(value) {
-    const seconds = Number(value);
+  function setBodyTransitionMs(value) {
+    const milliseconds = Number(value);
     if (
-      !Number.isFinite(seconds) ||
-      seconds < MIN_BODY_TRANSITION_SECONDS ||
-      seconds > MAX_BODY_TRANSITION_SECONDS
+      !Number.isFinite(milliseconds) ||
+      milliseconds < MIN_BODY_TRANSITION_MS ||
+      milliseconds > MAX_BODY_TRANSITION_MS
     ) {
       throw new Error(
-        `Body transition duration must be between ${MIN_BODY_TRANSITION_SECONDS} and ${MAX_BODY_TRANSITION_SECONDS} seconds.`,
+        `Body transition duration must be between ${MIN_BODY_TRANSITION_MS} and ${MAX_BODY_TRANSITION_MS} milliseconds.`,
       );
     }
-    state.body_transition_seconds = sanitizeBodyTransitionSeconds(seconds);
+    state.body_transition_ms = sanitizeBodyTransitionMs(milliseconds);
+    writeState();
+    return getSnapshot();
+  }
+
+  function setSpeakingDebounceMs(value) {
+    const sanitized = sanitizeSchedulerDelayMs(value, null);
+    if (sanitized == null) {
+      throw new Error(
+        `Speaking debounce must be between ${MIN_SCHEDULER_DELAY_MS} and ${MAX_SCHEDULER_DELAY_MS} milliseconds.`,
+      );
+    }
+    state.speaking_debounce_ms = sanitized;
+    writeState();
+    return getSnapshot();
+  }
+
+  function setIdleInterimMs(value) {
+    const sanitized = sanitizeSchedulerDelayMs(value, null);
+    if (sanitized == null) {
+      throw new Error(
+        `Idle interim must be between ${MIN_SCHEDULER_DELAY_MS} and ${MAX_SCHEDULER_DELAY_MS} milliseconds.`,
+      );
+    }
+    state.idle_interim_ms = sanitized;
     writeState();
     return getSnapshot();
   }
@@ -957,7 +1040,9 @@ function createSettingsStore({
   }
 
   function resetDeveloperSettings() {
-    state.body_transition_seconds = DEFAULT_BODY_TRANSITION_SECONDS;
+    state.body_transition_ms = DEFAULT_BODY_TRANSITION_MS;
+    state.speaking_debounce_ms = DEFAULT_SPEAKING_DEBOUNCE_MS;
+    state.idle_interim_ms = DEFAULT_IDLE_INTERIM_MS;
     state.speaking_transition = defaultSpeakingTransition();
     writeState();
     return getSnapshot();
@@ -1103,7 +1188,9 @@ function createSettingsStore({
     resolveAssetRequest,
     setCharacterSize,
     setSpeakingTransition,
-    setBodyTransitionSeconds,
+    setBodyTransitionMs,
+    setSpeakingDebounceMs,
+    setIdleInterimMs,
     setVoiceSource,
     setDefaultModel,
     setModelLighting,
@@ -1116,6 +1203,8 @@ module.exports = {
   ANIMATION_NAME_PATTERN,
   DEFAULT_MODEL_LIGHTING,
   DEFAULT_SPEAKING_TRANSITION,
+  DEFAULT_SPEAKING_DEBOUNCE_MS,
+  DEFAULT_IDLE_INTERIM_MS,
   DEFAULT_PACKAGED_LIBRARY_PATH,
   MAX_CHARACTER_SIZE,
   MIN_CHARACTER_SIZE,

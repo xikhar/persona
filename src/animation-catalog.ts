@@ -9,8 +9,11 @@ export type PlayableAnimationType = AnimationType | 'CUSTOM';
 
 export function immediateVoiceAnimation(
   voice: Pick<VoiceState, 'activity' | 'outputMuted' | 'phase'>,
-): 'IDLE' | 'TALK' | null {
-  if (voice.phase !== 'active' || voice.outputMuted) return 'IDLE';
+): 'TALK' | null {
+  // Voice state can start Speaking immediately, but it must never end the
+  // requested Speaking sequence directly. Raw level silence is debounced by
+  // the animation scheduler, which owns the eventual transition to Idle.
+  if (voice.phase !== 'active' || voice.outputMuted) return null;
   if (voice.activity === 'speaking') return 'TALK';
   return null;
 }

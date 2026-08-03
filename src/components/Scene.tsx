@@ -16,7 +16,10 @@ interface SceneProps {
   animation: PlayableAnimationType;
   animationRequest: number;
   animationUrls?: readonly string[];
+  fallbackAnimationUrls?: readonly string[];
+  preloadAnimationUrls?: readonly string[];
   audioLevel: number;
+  bodySpeaking: boolean;
   characterSize: number;
   enablePan?: boolean;
   framingMargin?: number;
@@ -25,9 +28,10 @@ interface SceneProps {
   modelUrl: string;
   onAnimationComplete: () => void;
   playback: 'loop' | 'once';
-  speakingMotionActive: boolean;
   speaking: boolean;
-  bodyTransitionSeconds: number;
+  bodyTransitionMs: number;
+  speakingDebounceMs: number;
+  idleInterimMs: number;
   speakingTransition: PersonaSpeakingTransitionSettings;
 }
 

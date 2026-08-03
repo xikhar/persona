@@ -1,7 +1,9 @@
 import {
-  DEFAULT_BODY_TRANSITION_SECONDS,
+  DEFAULT_BODY_TRANSITION_MS,
+  DEFAULT_IDLE_INTERIM_MS,
+  DEFAULT_SPEAKING_DEBOUNCE_MS,
   DEFAULT_SPEAKING_TRANSITION,
-} from './speaking-chunks';
+} from './animation-scheduler';
 
 interface PackagedLibraryDocument {
   schema_version: number;
@@ -87,11 +89,13 @@ export function resolveLightingSettings(
 }
 
 export const SETTINGS_FALLBACK: PersonaSettingsSnapshot = {
-  schema_version: 7,
+  schema_version: 9,
   default_model_id: null,
   character_size: 1,
   developer_settings_enabled: false,
-  body_transition_seconds: DEFAULT_BODY_TRANSITION_SECONDS,
+  body_transition_ms: DEFAULT_BODY_TRANSITION_MS,
+  speaking_debounce_ms: DEFAULT_SPEAKING_DEBOUNCE_MS,
+  idle_interim_ms: DEFAULT_IDLE_INTERIM_MS,
   speaking_transition: { ...DEFAULT_SPEAKING_TRANSITION },
   packaged_animation_change_count: 0,
   models: [],

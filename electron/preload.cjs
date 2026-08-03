@@ -47,8 +47,12 @@ contextBridge.exposeInMainWorld("personaSettings", {
       "persona:settings-set-speaking-transition",
       transition,
     ),
-  setBodyTransitionSeconds: (seconds) =>
-    ipcRenderer.invoke("persona:settings-set-body-transition-seconds", seconds),
+  setBodyTransitionMs: (milliseconds) =>
+    ipcRenderer.invoke("persona:settings-set-body-transition-ms", milliseconds),
+  setSpeakingDebounceMs: (milliseconds) =>
+    ipcRenderer.invoke("persona:settings-set-speaking-debounce-ms", milliseconds),
+  setIdleInterimMs: (milliseconds) =>
+    ipcRenderer.invoke("persona:settings-set-idle-interim-ms", milliseconds),
   enableDeveloperSettings: () =>
     ipcRenderer.invoke("persona:settings-enable-developer"),
   resetDeveloperSettings: () =>
