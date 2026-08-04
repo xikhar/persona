@@ -164,5 +164,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^4.4.3"
+  },
+  "overrides": {
+    "yauzl": "^3.3.1"
   }
 }
