@@ -20,6 +20,7 @@ import {
   SETTINGS_FALLBACK,
 } from './settings-defaults';
 import { useWindowDrag } from './hooks/useWindowDrag';
+import { createDragInertiaState, queueDragPixels } from './drag-inertia';
 import {
   BODY_SPEECH_LEVEL_THRESHOLD,
   bodySpeechSignalActive,
@@ -33,7 +34,15 @@ const INITIAL_STATE: VoiceState = {
 };
 
 export function App() {
-  useWindowDrag();
+  // Shared with the render loop by reference: drag events arrive far more
+  // often than React should re-render the scene.
+  const [dragInertia] = useState(createDragInertiaState);
+  useWindowDrag(
+    useCallback(
+      (dx: number, dy: number) => queueDragPixels(dragInertia, dx, dy),
+      [dragInertia],
+    ),
+  );
   const [voice, setVoice] = useState<VoiceState>(INITIAL_STATE);
   const [audioLevel, setAudioLevel] = useState(0);
   const [hasObservedAudioLevel, setHasObservedAudioLevel] = useState(false);
@@ -149,6 +158,7 @@ export function App() {
         audioLevel={audioLevel}
         bodySpeaking={bodySpeaking}
         characterSize={settings.character_size}
+        dragInertia={dragInertia}
         lighting={settings.model_lighting[defaultModel.id]}
         modelUrl={defaultModel.asset_url}
         onAnimationComplete={handleAnimationComplete}

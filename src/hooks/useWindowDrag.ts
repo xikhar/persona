@@ -1,6 +1,15 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
-export function useWindowDrag() {
+/**
+ * @param onDrag Receives each drag step in screen pixels, so the renderer can
+ *   give the character secondary motion the window move itself cannot produce.
+ */
+export function useWindowDrag(onDrag?: (dx: number, dy: number) => void) {
+  const onDragRef = useRef(onDrag);
+  useEffect(() => {
+    onDragRef.current = onDrag;
+  }, [onDrag]);
+
   useEffect(() => {
     const bridge = window.personaBridge;
     if (!bridge) return;
@@ -37,7 +46,10 @@ export function useWindowDrag() {
         stopDragging();
         return;
       }
-      bridge.moveBy(event.screenX - lastX, event.screenY - lastY);
+      const dx = event.screenX - lastX;
+      const dy = event.screenY - lastY;
+      bridge.moveBy(dx, dy);
+      onDragRef.current?.(dx, dy);
       lastX = event.screenX;
       lastY = event.screenY;
       event.stopPropagation();

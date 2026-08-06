@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { Avatar } from './Avatar';
 import type { PlayableAnimationType } from '../animation-catalog';
 import { calculateFullBodyFraming } from '../camera-framing';
+import type { DragInertiaState } from '../drag-inertia';
 import { resolveLightingSettings } from '../settings-defaults';
 
 interface SceneProps {
@@ -21,6 +22,7 @@ interface SceneProps {
   audioLevel: number;
   bodySpeaking: boolean;
   characterSize: number;
+  dragInertia?: DragInertiaState;
   enablePan?: boolean;
   framingMargin?: number;
   groundShadow?: boolean;
