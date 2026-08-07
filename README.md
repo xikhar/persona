@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./public/assets/avatar.png" alt="Persona avatar" width="96" />
+  <img src="./public/assets/avatar.png" alt="Persona avatar" width="144" />
 </p>
 
 <h1 align="center">Persona</h1>
@@ -9,7 +9,7 @@
 </p>
 
 <p align="center" style="max-width: 700px; margin:0 auto; border-radius: 8px; overflow: hidden;">
-<image src="./public/assets/demo.jpg" alt="Persona demo" width=700 />
+  <img src="./public/assets/demo.jpg" alt="Persona demo" width=700 />
 </p>
 
 Persona is a cross-platform desktop character that gives voice conversations
