@@ -98,39 +98,27 @@ chunk to begin at a more distant first keyframe.
 Compatibility work is lazy. Short output gaps remain inside Speaking and never
 rank or instantiate an unused Idle action.
 
-`src/drag-inertia.ts` gives the character secondary motion when the user
-handles it. Orbiting moves the camera and Alt+drag moves the window, so
-neither displaces the character in world space and its spring bones see no
-acceleration. The module turns both gestures into a transient displacement of
-the model root — a drag lags the body opposite the drag, an orbit sweep twists
-it about the vertical axis — and lets the existing three-vrm spring simulation
-answer. Both settle to exact rest, so a gesture never leaves the character
-moved or turned.
+`src/drag-inertia.ts` gives the character secondary motion while the user is
+handling it. Orbiting moves the camera and Alt+drag moves the window, so
+neither displaces the character and its spring bones see no acceleration. The
+module turns both gestures into a transient lag that the existing three-vrm
+spring simulation answers, and both settle to exact rest, so a gesture never
+leaves the character moved or turned.
 
-The lag is delivered as a lean of the torso, not a move of the model root. A
+The lag is a lean of the torso rather than a move of the model root, because a
 VRM spring may declare a `center` node and is then blind to any motion of that
-node, so moving the root is cancelled outright by both common conventions: a
-center on the scene root, which VRoid writes, and a center on the hips. Of the
-models on hand only one responded to a root move, and it only did so because
-its export had been changed to drop the centers. Leaning the spine moves the
-joints relative to every such center, since the rotation happens below all of
-them. A rotation cannot reproduce a vertical lag, so a purely up-and-down
-gesture leans less than a sideways one.
+node. Both conventions in the wild cancel a root move outright, a center on
+the scene root and a center on the hips, while a rotation below them registers
+on any rig. The lean is written to the normalized humanoid rig, on top of the
+animated pose each frame and without accumulating, and is shared top heavy so
+that rigid props mounted on the chest are not flung about. A rotation cannot
+reproduce a vertical lag, so a purely up-and-down gesture leans less than a
+sideways one.
 
-The lean is shared along the torso top heavy, most of it on the upper chest.
-Rigid props are mounted lower, on the chest, and a rig may carry very long
-ones: sharing the lean evenly threw a pair of wings 21cm, while the top heavy
-split leaves them a 5cm follow. Sparing them outright would be just as wrong,
-since a body that leans carries what is strapped to it. The spring response is
-within one percent either way, because hair hangs off the head and the chest
-chain off the upper chest, both above every joint the lean touches.
-
-Its offsets are screen-relative and the renderer maps them onto the camera
-basis, which keeps a drag pulling the same visual direction whatever way the
-camera faces. Azimuth is read against the orbit target rather than the model,
-so panning does not register as rotation, and a sweep larger than a hand can
-produce in one frame is discarded as a camera reposition rather than a
-gesture.
+Offsets are relative to the screen and mapped onto the camera basis. Azimuth
+is read against the orbit target rather than the model, so panning does not
+register as a rotation, and a sweep too large to be a hand gesture is
+discarded as a camera reposition.
 
 The persisted
 `speaking_transition.entry_ms` and `speaking_transition.exit_ms`
