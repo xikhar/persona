@@ -211,13 +211,16 @@ type AvatarBridgeEvent =
       requestId?: number;
     }
   | { type: 'listener-status'; status: AudioListenerStatus }
-  | { type: 'bridge-status'; connected: boolean };
+  | { type: 'bridge-status'; connected: boolean }
+  | { type: 'click-through'; enabled: boolean }
+  | { type: 'mic-lip-sync'; enabled: boolean };
 
 interface Window {
   personaBridge?: {
     getSnapshot(): Promise<AvatarBridgeEvent | null>;
     hide(): void;
     moveBy(dx: number, dy: number): void;
+    setMousePassthrough(ignore: boolean): void;
     subscribe(listener: (event: AvatarBridgeEvent) => void): () => void;
   };
   personaSettings?: {

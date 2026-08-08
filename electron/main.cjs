@@ -96,6 +96,12 @@ let hyprlandConfigurationTimer = null;
 let hyprlandLastPosition = null;
 let hyprlandConfigurationGeneration = 0;
 let rendererLoadHookAttached = false;
+// Overlay interaction modes. Click-through lets the frameless transparent
+// window float over the desktop while the renderer momentarily re-enables input
+// over the character silhouette. Microphone lip-sync is an in-renderer Web
+// Audio fallback that drives the avatar without the native audio helper.
+let clickThroughEnabled = true;
+let microphoneLipSyncEnabled = false;
 let animationCommandRequestId = 0;
 let modelConfigured = false;
 let mcpServerError = null;
@@ -215,6 +221,7 @@ function showOverlay({ focus = false } = {}) {
   } else if (!window.isVisible()) {
     window.showInactive();
   }
+  emitOverlayModes();
   scheduleHyprlandWindowConfiguration();
 }
 
@@ -312,6 +319,11 @@ function createWindow() {
   window.setAlwaysOnTop(true, "floating");
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   window.setOpacity(1);
+  // Start click-through so the transparent, always-on-top window never blocks
+  // the desktop beneath it before the renderer's silhouette hit-test loads.
+  // { forward: true } keeps mousemove flowing to the renderer so it can detect
+  // the cursor over the character and re-enable input for that region.
+  window.setIgnoreMouseEvents(clickThroughEnabled, { forward: true });
   window.once("ready-to-show", () => {
     if (window.isDestroyed()) return;
     positionWindow(window);
@@ -713,6 +725,43 @@ function emitToRenderer(event) {
   pendingRendererEvents.delete(event.type);
 }
 
+// Mode events tell the renderer how to behave rather than what the voice is
+// doing, so they are queued and flushed like other renderer events but never
+// become the get-snapshot "last event" that App reads for the initial voice
+// state.
+function sendOverlayMode(event) {
+  pendingRendererEvents.set(event.type, event);
+  if (!avatarWindow || avatarWindow.isDestroyed()) return;
+  if (avatarWindow.webContents.isLoading()) {
+    ensureRendererLoadHook();
+    return;
+  }
+  avatarWindow.webContents.send("persona:event", event);
+  pendingRendererEvents.delete(event.type);
+}
+
+function emitOverlayModes() {
+  sendOverlayMode({ type: "click-through", enabled: clickThroughEnabled });
+  sendOverlayMode({ type: "mic-lip-sync", enabled: microphoneLipSyncEnabled });
+}
+
+function setClickThroughEnabled(enabled) {
+  clickThroughEnabled = enabled;
+  if (avatarWindow && !avatarWindow.isDestroyed() && !enabled) {
+    // Locking to interactive: stop ignoring immediately rather than waiting for
+    // the renderer's next hit-test, so the whole window is clickable at once.
+    avatarWindow.setIgnoreMouseEvents(false);
+  }
+  sendOverlayMode({ type: "click-through", enabled });
+  refreshTrayMenu();
+}
+
+function setMicrophoneLipSyncEnabled(enabled) {
+  microphoneLipSyncEnabled = enabled;
+  sendOverlayMode({ type: "mic-lip-sync", enabled });
+  refreshTrayMenu();
+}
+
 function handleBridgeEvent(event) {
   if (event.type !== "audio-level" || event.level > 0.025) debugLog("event", event);
   const canShowAvatar = hasConfiguredModel();
@@ -813,6 +862,19 @@ function refreshTrayMenu() {
         {
           label: "Preview speaking",
           click: () => handleBridgeEvent(voiceState("speaking")),
+        },
+        { type: "separator" },
+        {
+          label: "Click-through (float over windows)",
+          type: "checkbox",
+          checked: clickThroughEnabled,
+          click: (item) => setClickThroughEnabled(item.checked),
+        },
+        {
+          label: "Microphone lip-sync",
+          type: "checkbox",
+          checked: microphoneLipSyncEnabled,
+          click: (item) => setMicrophoneLipSyncEnabled(item.checked),
         },
         { type: "separator" },
         quitItem,
@@ -1233,6 +1295,16 @@ if (!app.requestSingleInstanceLock()) {
         Math.round(bounds.x + dx),
         Math.round(bounds.y + dy),
       );
+    });
+    // The renderer owns the fine-grained click-through decision: it forwards a
+    // hit-test result as the cursor crosses the character silhouette. Only the
+    // avatar window may drive it, and only with a boolean.
+    ipcMain.on("persona:set-mouse-passthrough", (event, ignore) => {
+      if (!avatarWindow || avatarWindow.isDestroyed()) return;
+      if (event.sender !== avatarWindow.webContents) return;
+      if (typeof ignore !== "boolean") return;
+      if (!clickThroughEnabled) return;
+      avatarWindow.setIgnoreMouseEvents(ignore, { forward: true });
     });
     // The resolved theme lives in renderer storage, so the window chrome can
     // only be corrected once the settings renderer reports it. Accepts the two

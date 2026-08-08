@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import {
   ContactShadows,
@@ -35,6 +35,7 @@ interface SceneProps {
   speakingDebounceMs: number;
   idleInterimMs: number;
   speakingTransition: PersonaSpeakingTransitionSettings;
+  clickThrough?: boolean;
 }
 
 interface TargetControls {
@@ -142,6 +143,104 @@ function FullBodyCamera({
   return null;
 }
 
+/**
+ * Drives the avatar window's click-through so it floats over the desktop like a
+ * desktop pet: the window ignores the mouse everywhere except over the
+ * character. While the window is ignoring input, Electron still forwards
+ * mousemove (setIgnoreMouseEvents(true, { forward: true })), so this raycasts
+ * the cursor against the character silhouette each move and re-enables input
+ * only while the cursor is over an actual mesh — transparent gaps stay
+ * click-through. A held button never flips to passthrough mid-orbit/drag.
+ */
+function PassthroughController({
+  enabled,
+  object,
+}: {
+  enabled: boolean;
+  object: THREE.Object3D | null;
+}) {
+  const camera = useThree((state) => state.camera);
+  const gl = useThree((state) => state.gl);
+
+  useEffect(() => {
+    const bridge = window.personaBridge;
+    if (!bridge?.setMousePassthrough) return;
+
+    if (!enabled) {
+      // Locked to interactive: the whole window takes the mouse.
+      bridge.setMousePassthrough(false);
+      return;
+    }
+
+    const canvas = gl.domElement;
+    const raycaster = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+    let passthrough = true;
+    let buttonDown = false;
+    let clientX = 0;
+    let clientY = 0;
+    let frame = 0;
+    let scheduled = false;
+
+    const apply = (next: boolean) => {
+      if (next === passthrough) return;
+      passthrough = next;
+      bridge.setMousePassthrough(next);
+    };
+
+    const hitTest = () => {
+      scheduled = false;
+      if (buttonDown) {
+        apply(false);
+        return;
+      }
+      if (!object) {
+        apply(true);
+        return;
+      }
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(ndc, camera);
+      apply(raycaster.intersectObject(object, true).length === 0);
+    };
+
+    const onMove = (event: MouseEvent) => {
+      clientX = event.clientX;
+      clientY = event.clientY;
+      if (!scheduled) {
+        scheduled = true;
+        frame = requestAnimationFrame(hitTest);
+      }
+    };
+    const onDown = () => {
+      buttonDown = true;
+      apply(false);
+    };
+    const onUp = () => {
+      buttonDown = false;
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mousedown', onDown, { capture: true });
+    window.addEventListener('mouseup', onUp, { capture: true });
+    // Match the window's initial ignoring state set by the main process.
+    bridge.setMousePassthrough(true);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mousedown', onDown, { capture: true });
+      window.removeEventListener('mouseup', onUp, { capture: true });
+      // Leave the window interactive so a later mount is never stuck ignoring.
+      bridge.setMousePassthrough(false);
+    };
+  }, [camera, enabled, gl, object]);
+
+  return null;
+}
+
 export function Scene(props: SceneProps) {
   const lighting = resolveLightingSettings(props.lighting);
   const [avatarScene, setAvatarScene] = useState<THREE.Object3D | null>(null);
@@ -201,6 +300,10 @@ export function Scene(props: SceneProps) {
         object={avatarScene}
       />
       <Avatar {...props} onReady={handleAvatarReady} />
+      <PassthroughController
+        enabled={props.clickThrough ?? true}
+        object={avatarScene}
+      />
       {props.groundShadow && grounding && (
         <ContactShadows
           blur={2.4}

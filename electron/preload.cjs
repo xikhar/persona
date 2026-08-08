@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld("personaBridge", {
   getSnapshot: () => ipcRenderer.invoke("persona:get-snapshot"),
   hide: () => ipcRenderer.send("persona:hide"),
   moveBy: (dx, dy) => ipcRenderer.send("persona:move-by", dx, dy),
+  setMousePassthrough: (ignore) =>
+    ipcRenderer.send("persona:set-mouse-passthrough", ignore),
   subscribe: (listener) => {
     const handler = (_event, payload) => listener(payload);
     ipcRenderer.on("persona:event", handler);

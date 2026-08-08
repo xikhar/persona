@@ -20,6 +20,7 @@ import {
   SETTINGS_FALLBACK,
 } from './settings-defaults';
 import { useWindowDrag } from './hooks/useWindowDrag';
+import { useMicrophoneLevel } from './hooks/useMicrophoneLevel';
 import { createDragInertiaState, queueDragPixels } from './drag-inertia';
 import {
   BODY_SPEECH_LEVEL_THRESHOLD,
@@ -46,6 +47,8 @@ export function App() {
   const [voice, setVoice] = useState<VoiceState>(INITIAL_STATE);
   const [audioLevel, setAudioLevel] = useState(0);
   const [hasObservedAudioLevel, setHasObservedAudioLevel] = useState(false);
+  const [clickThrough, setClickThrough] = useState(true);
+  const [micLipSync, setMicLipSync] = useState(false);
   const [voiceAnimation, setVoiceAnimation] = useState<AnimationType>('IDLE');
   const [bodyOverride, setBodyOverride] =
     useState<BodyAnimationOverride | null>(null);
@@ -84,6 +87,10 @@ export function App() {
         } else if (event.animation !== 'CUSTOM') {
           setVoiceAnimation(event.animation);
         }
+      } else if (event.type === 'click-through') {
+        setClickThrough(event.enabled);
+      } else if (event.type === 'mic-lip-sync') {
+        setMicLipSync(event.enabled);
       }
     });
   }, []);
@@ -98,13 +105,27 @@ export function App() {
     return settingsBridge.subscribe(setSettings);
   }, []);
 
+  // Microphone lip-sync runs in the renderer, so it drives the avatar without
+  // the native audio helper. Its level joins the bridge level (only one is ever
+  // active on a given machine) and marks the signal observed so the scheduler
+  // treats it like any other live output level.
+  const micLevel = useMicrophoneLevel(micLipSync);
+  const effectiveAudioLevel = Math.max(audioLevel, micLevel);
+  const effectiveAudioObserved =
+    hasObservedAudioLevel || (micLipSync && micLevel > 0);
+  useEffect(() => {
+    if (micLipSync && micLevel > BODY_SPEECH_LEVEL_THRESHOLD) {
+      setVoiceAnimation('TALK');
+    }
+  }, [micLipSync, micLevel]);
+
   const speaking =
     voice.phase === 'active' &&
     voice.activity === 'speaking' &&
     !voice.outputMuted;
   const bodySpeaking = bodySpeechSignalActive({
-    audioLevel,
-    audioLevelObserved: hasObservedAudioLevel,
+    audioLevel: effectiveAudioLevel,
+    audioLevelObserved: effectiveAudioObserved,
     voiceSpeaking: speaking,
   });
   useEffect(() => {
@@ -155,9 +176,10 @@ export function App() {
         animationUrls={animationUrls}
         fallbackAnimationUrls={idleAnimationUrls}
         preloadAnimationUrls={preloadAnimationUrls}
-        audioLevel={audioLevel}
+        audioLevel={effectiveAudioLevel}
         bodySpeaking={bodySpeaking}
         characterSize={settings.character_size}
+        clickThrough={clickThrough}
         dragInertia={dragInertia}
         lighting={settings.model_lighting[defaultModel.id]}
         modelUrl={defaultModel.asset_url}
