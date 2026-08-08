@@ -199,6 +199,8 @@ interface PersonaVroidHubCharacter {
   license: PersonaVroidHubCharacterLicense | null;
 }
 
+type LipSyncSource = 'off' | 'microphone' | 'system';
+
 type AvatarBridgeEvent =
   | { type: 'state'; state: VoiceState }
   | { type: 'audio-level'; level: number; bands?: Record<string, number> }
@@ -213,7 +215,7 @@ type AvatarBridgeEvent =
   | { type: 'listener-status'; status: AudioListenerStatus }
   | { type: 'bridge-status'; connected: boolean }
   | { type: 'click-through'; enabled: boolean }
-  | { type: 'mic-lip-sync'; enabled: boolean };
+  | { type: 'lip-sync-source'; source: LipSyncSource };
 
 interface Window {
   personaBridge?: {

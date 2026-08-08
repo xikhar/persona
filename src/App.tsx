@@ -20,7 +20,7 @@ import {
   SETTINGS_FALLBACK,
 } from './settings-defaults';
 import { useWindowDrag } from './hooks/useWindowDrag';
-import { useMicrophoneLevel } from './hooks/useMicrophoneLevel';
+import { useCaptureLevel } from './hooks/useCaptureLevel';
 import { createDragInertiaState, queueDragPixels } from './drag-inertia';
 import {
   BODY_SPEECH_LEVEL_THRESHOLD,
@@ -48,7 +48,7 @@ export function App() {
   const [audioLevel, setAudioLevel] = useState(0);
   const [hasObservedAudioLevel, setHasObservedAudioLevel] = useState(false);
   const [clickThrough, setClickThrough] = useState(true);
-  const [micLipSync, setMicLipSync] = useState(false);
+  const [lipSyncSource, setLipSyncSource] = useState<LipSyncSource>('off');
   const [voiceAnimation, setVoiceAnimation] = useState<AnimationType>('IDLE');
   const [bodyOverride, setBodyOverride] =
     useState<BodyAnimationOverride | null>(null);
@@ -89,8 +89,8 @@ export function App() {
         }
       } else if (event.type === 'click-through') {
         setClickThrough(event.enabled);
-      } else if (event.type === 'mic-lip-sync') {
-        setMicLipSync(event.enabled);
+      } else if (event.type === 'lip-sync-source') {
+        setLipSyncSource(event.source);
       }
     });
   }, []);
@@ -105,19 +105,20 @@ export function App() {
     return settingsBridge.subscribe(setSettings);
   }, []);
 
-  // Microphone lip-sync runs in the renderer, so it drives the avatar without
+  // In-renderer lip-sync (microphone or system audio) drives the avatar without
   // the native audio helper. Its level joins the bridge level (only one is ever
   // active on a given machine) and marks the signal observed so the scheduler
   // treats it like any other live output level.
-  const micLevel = useMicrophoneLevel(micLipSync);
-  const effectiveAudioLevel = Math.max(audioLevel, micLevel);
+  const captureLevel = useCaptureLevel(lipSyncSource);
+  const captureActive = lipSyncSource !== 'off';
+  const effectiveAudioLevel = Math.max(audioLevel, captureLevel);
   const effectiveAudioObserved =
-    hasObservedAudioLevel || (micLipSync && micLevel > 0);
+    hasObservedAudioLevel || (captureActive && captureLevel > 0);
   useEffect(() => {
-    if (micLipSync && micLevel > BODY_SPEECH_LEVEL_THRESHOLD) {
+    if (captureActive && captureLevel > BODY_SPEECH_LEVEL_THRESHOLD) {
       setVoiceAnimation('TALK');
     }
-  }, [micLipSync, micLevel]);
+  }, [captureActive, captureLevel]);
 
   const speaking =
     voice.phase === 'active' &&

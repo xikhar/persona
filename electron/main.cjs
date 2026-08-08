@@ -5,6 +5,7 @@ const { pathToFileURL } = require("node:url");
 const {
   app,
   BrowserWindow,
+  desktopCapturer,
   dialog,
   globalShortcut,
   ipcMain,
@@ -15,6 +16,7 @@ const {
   protocol,
   safeStorage,
   screen,
+  session,
   shell,
   Tray,
 } = require("electron");
@@ -98,10 +100,12 @@ let hyprlandConfigurationGeneration = 0;
 let rendererLoadHookAttached = false;
 // Overlay interaction modes. Click-through lets the frameless transparent
 // window float over the desktop while the renderer momentarily re-enables input
-// over the character silhouette. Microphone lip-sync is an in-renderer Web
-// Audio fallback that drives the avatar without the native audio helper.
+// over the character silhouette. The lip-sync source is an in-renderer Web
+// Audio fallback that drives the avatar without the native audio helper:
+// "microphone" reacts to your voice, "system" to desktop/app output audio.
+const LIP_SYNC_SOURCES = new Set(["off", "microphone", "system"]);
 let clickThroughEnabled = true;
-let microphoneLipSyncEnabled = false;
+let lipSyncSource = "off";
 let animationCommandRequestId = 0;
 let modelConfigured = false;
 let mcpServerError = null;
@@ -742,7 +746,7 @@ function sendOverlayMode(event) {
 
 function emitOverlayModes() {
   sendOverlayMode({ type: "click-through", enabled: clickThroughEnabled });
-  sendOverlayMode({ type: "mic-lip-sync", enabled: microphoneLipSyncEnabled });
+  sendOverlayMode({ type: "lip-sync-source", source: lipSyncSource });
 }
 
 function setClickThroughEnabled(enabled) {
@@ -756,9 +760,10 @@ function setClickThroughEnabled(enabled) {
   refreshTrayMenu();
 }
 
-function setMicrophoneLipSyncEnabled(enabled) {
-  microphoneLipSyncEnabled = enabled;
-  sendOverlayMode({ type: "mic-lip-sync", enabled });
+function setLipSyncSource(source) {
+  if (!LIP_SYNC_SOURCES.has(source)) return;
+  lipSyncSource = source;
+  sendOverlayMode({ type: "lip-sync-source", source });
   refreshTrayMenu();
 }
 
@@ -871,10 +876,27 @@ function refreshTrayMenu() {
           click: (item) => setClickThroughEnabled(item.checked),
         },
         {
-          label: "Microphone lip-sync",
-          type: "checkbox",
-          checked: microphoneLipSyncEnabled,
-          click: (item) => setMicrophoneLipSyncEnabled(item.checked),
+          label: "Lip-sync source",
+          submenu: [
+            {
+              label: "Off",
+              type: "radio",
+              checked: lipSyncSource === "off",
+              click: () => setLipSyncSource("off"),
+            },
+            {
+              label: "Microphone (your voice)",
+              type: "radio",
+              checked: lipSyncSource === "microphone",
+              click: () => setLipSyncSource("microphone"),
+            },
+            {
+              label: "System / app audio (assistant output)",
+              type: "radio",
+              checked: lipSyncSource === "system",
+              click: () => setLipSyncSource("system"),
+            },
+          ],
         },
         { type: "separator" },
         quitItem,
@@ -1357,6 +1379,27 @@ if (!app.requestSingleInstanceLock()) {
       );
       bridge = null;
     }
+
+    // System/app-output lip-sync captures desktop audio inside Chromium via
+    // getDisplayMedia, so it needs no spawned helper. The renderer only wants
+    // the loopback audio track; a screen source is supplied because the capture
+    // API still requires a video source, and the renderer drops that track at
+    // once. Selection is automatic so no picker interrupts the desktop pet.
+    session.defaultSession.setDisplayMediaRequestHandler(
+      (_request, callback) => {
+        desktopCapturer
+          .getSources({ types: ["screen"] })
+          .then((sources) => {
+            if (sources.length === 0) {
+              callback({});
+              return;
+            }
+            callback({ video: sources[0], audio: "loopback" });
+          })
+          .catch(() => callback({}));
+      },
+      { useSystemPicker: false },
+    );
 
     createTray();
     globalShortcut.register("CommandOrControl+Shift+A", toggleOverlay);

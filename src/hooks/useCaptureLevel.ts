@@ -1,28 +1,50 @@
 import { useEffect, useRef, useState } from 'react';
 
-// RMS below this is treated as room noise and clamped to silence; the span above
-// it maps onto 0..1. Tuned for ordinary speech into a laptop microphone.
+// RMS below this is treated as noise and clamped to silence; the span above it
+// maps onto 0..1. Tuned for ordinary speech through a laptop mic or loopback.
 const NOISE_FLOOR = 0.01;
 const LEVEL_SPAN = 0.2;
 
+async function acquireStream(
+  source: Exclude<LipSyncSource, 'off'>,
+): Promise<MediaStream | null> {
+  const media = navigator.mediaDevices;
+  try {
+    if (source === 'microphone') {
+      if (!media?.getUserMedia) return null;
+      return await media.getUserMedia({ audio: true, video: false });
+    }
+    if (!media?.getDisplayMedia) return null;
+    // The capture API still requires a video source; the main process supplies
+    // a screen source for loopback audio and we keep only the audio track.
+    const stream = await media.getDisplayMedia({ audio: true, video: true });
+    stream.getVideoTracks().forEach((track) => track.stop());
+    return stream;
+  } catch {
+    // Permission denied, no device, or capture blocked: stay silent.
+    return null;
+  }
+}
+
 /**
- * In-renderer microphone lip-sync source. Runs entirely inside Chromium's Web
- * Audio API, so it needs no native helper process — a way to animate the avatar
- * on machines where the packaged audio listener cannot be spawned. Returns a
- * normalized 0..1 level, or a steady 0 while disabled or permission is denied.
+ * In-renderer lip-sync level meter. Runs entirely inside Chromium's Web Audio
+ * API, so it needs no native helper process — a way to animate the avatar on
+ * machines where the packaged audio listener cannot be spawned. "microphone"
+ * reacts to your voice; "system" reacts to desktop/app output (for example a
+ * voice assistant's speech). Returns a normalized 0..1 level, or a steady 0
+ * while off or when capture is unavailable.
  */
-export function useMicrophoneLevel(enabled: boolean): number {
+export function useCaptureLevel(source: LipSyncSource): number {
   const [level, setLevel] = useState(0);
   // Read inside the animation frame without re-subscribing the effect.
   const levelRef = useRef(0);
 
   useEffect(() => {
-    if (!enabled) {
+    if (source === 'off') {
       setLevel(0);
       levelRef.current = 0;
       return;
     }
-    if (!navigator.mediaDevices?.getUserMedia) return;
 
     let cancelled = false;
     let stream: MediaStream | null = null;
@@ -30,27 +52,19 @@ export function useMicrophoneLevel(enabled: boolean): number {
     let frame = 0;
 
     const start = async () => {
-      let captured: MediaStream;
-      try {
-        captured = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: false,
-        });
-      } catch {
-        // Permission denied or no input device: stay silent rather than throw.
-        return;
-      }
-      if (cancelled) {
+      const captured = await acquireStream(source);
+      if (!captured) return;
+      if (cancelled || captured.getAudioTracks().length === 0) {
         captured.getTracks().forEach((track) => track.stop());
         return;
       }
       stream = captured;
       audioContext = new AudioContext();
-      const source = audioContext.createMediaStreamSource(stream);
+      const analyserSource = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 1024;
       analyser.smoothingTimeConstant = 0.6;
-      source.connect(analyser);
+      analyserSource.connect(analyser);
       const samples = new Float32Array(analyser.fftSize);
 
       const tick = () => {
@@ -78,7 +92,7 @@ export function useMicrophoneLevel(enabled: boolean): number {
       setLevel(0);
       levelRef.current = 0;
     };
-  }, [enabled]);
+  }, [source]);
 
   return level;
 }
