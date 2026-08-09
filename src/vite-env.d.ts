@@ -43,6 +43,14 @@ type PersonaAnimationType =
   | 'FINGER_GUN'
   | 'DANCE';
 
+
+type PersonaExpressionName =
+  | 'happy'
+  | 'angry'
+  | 'sad'
+  | 'relaxed'
+  | 'surprised';
+
 interface PersonaModelSettings {
   id: string;
   model_name: string;
@@ -56,6 +64,8 @@ interface PersonaAnimationSettings {
   animation_name: string;
   animation_description: string;
   animation_trigger_scenario: string;
+  expression_name: PersonaExpressionName | null;
+  expression_weight: number;
   animation_type: PersonaAnimationType | null;
   origin: 'packaged' | 'user';
   system: boolean;
@@ -137,6 +147,8 @@ interface CustomAnimationMetadata {
   animation_name: string;
   animation_description: string;
   animation_trigger_scenario: string;
+  expression_name: PersonaExpressionName | null;
+  expression_weight: number;
 }
 
 interface PersonaVroidHubStatus {
@@ -207,6 +219,8 @@ type AvatarBridgeEvent =
       animation: PersonaAnimationType | 'CUSTOM';
       animationName?: string;
       animationUrls?: string[];
+      expressionName?: PersonaExpressionName | null;
+      expressionWeight?: number;
       source?: 'command';
       requestId?: number;
     }

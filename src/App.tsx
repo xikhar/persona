@@ -79,6 +79,8 @@ export function App() {
             animation: event.animation,
             animationName: event.animationName,
             animationUrls: event.animationUrls,
+            expressionName: event.expressionName,
+            expressionWeight: event.expressionWeight,
             requestId: event.requestId,
           });
         } else if (event.animation !== 'CUSTOM') {
@@ -155,6 +157,8 @@ export function App() {
         animationUrls={animationUrls}
         fallbackAnimationUrls={idleAnimationUrls}
         preloadAnimationUrls={preloadAnimationUrls}
+        expressionName={bodyOverride?.expressionName}
+        expressionWeight={bodyOverride?.expressionWeight}
         audioLevel={audioLevel}
         bodySpeaking={bodySpeaking}
         characterSize={settings.character_size}

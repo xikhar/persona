@@ -54,6 +54,14 @@ const LIGHTING_NUMBER_RANGES: Record<
   ambient_intensity: [0, 4],
 };
 
+const EXPRESSION_OPTIONS: PersonaExpressionName[] = [
+  'happy',
+  'angry',
+  'sad',
+  'relaxed',
+  'surprised',
+];
+
 interface ConfirmationRequest {
   confirmLabel: string;
   detail: ReactNode;
@@ -407,6 +415,8 @@ export function SettingsPage() {
       animation_name: '',
       animation_description: '',
       animation_trigger_scenario: '',
+      expression_name: null,
+      expression_weight: 1,
     });
   const [editingAnimationId, setEditingAnimationId] = useState<string | null>(
     null,
@@ -416,6 +426,8 @@ export function SettingsPage() {
       animation_name: '',
       animation_description: '',
       animation_trigger_scenario: '',
+      expression_name: null,
+      expression_weight: 1,
     });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -803,6 +815,8 @@ export function SettingsPage() {
       animation_name: '',
       animation_description: '',
       animation_trigger_scenario: '',
+      expression_name: null,
+      expression_weight: 1,
     });
   };
 
@@ -968,6 +982,8 @@ export function SettingsPage() {
       animation_name: animation.animation_name,
       animation_description: animation.animation_description,
       animation_trigger_scenario: animation.animation_trigger_scenario,
+      expression_name: animation.expression_name,
+      expression_weight: animation.expression_weight,
     });
   };
 
@@ -1998,6 +2014,44 @@ export function SettingsPage() {
                         }
                       />
                     </label>
+                    <label>
+                      Expression <code>expression_name</code>
+                      <select
+                        value={editingAnimationMetadata.expression_name ?? ''}
+                        onChange={(event) =>
+                          setEditingAnimationMetadata((current) => ({
+                            ...current,
+                            expression_name:
+                              (event.target.value as PersonaExpressionName) || null,
+                          }))
+                        }
+                      >
+                        <option value="">None</option>
+                        {EXPRESSION_OPTIONS.map((expression) => (
+                          <option key={expression} value={expression}>
+                            {expression}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {editingAnimationMetadata.expression_name && (
+                      <label>
+                        Expression weight <code>expression_weight</code>
+                        <input
+                          type="number"
+                          min="0"
+                          max="1"
+                          step="0.05"
+                          value={editingAnimationMetadata.expression_weight}
+                          onChange={(event) =>
+                            setEditingAnimationMetadata((current) => ({
+                              ...current,
+                              expression_weight: Number(event.target.value),
+                            }))
+                          }
+                        />
+                      </label>
+                    )}
                   </div>
                   <div className="form-actions">
                     <button
@@ -2086,6 +2140,44 @@ export function SettingsPage() {
                       value={animationMetadata.animation_trigger_scenario}
                     />
                   </label>
+                  <label>
+                    Expression <code>expression_name</code>
+                    <select
+                      value={animationMetadata.expression_name ?? ''}
+                      onChange={(event) =>
+                        setAnimationMetadata((current) => ({
+                          ...current,
+                          expression_name:
+                            (event.target.value as PersonaExpressionName) || null,
+                        }))
+                      }
+                    >
+                      <option value="">None</option>
+                      {EXPRESSION_OPTIONS.map((expression) => (
+                        <option key={expression} value={expression}>
+                          {expression}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {animationMetadata.expression_name && (
+                    <label>
+                      Expression weight <code>expression_weight</code>
+                      <input
+                        type="number"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={animationMetadata.expression_weight}
+                        onChange={(event) =>
+                          setAnimationMetadata((current) => ({
+                            ...current,
+                            expression_weight: Number(event.target.value),
+                          }))
+                        }
+                      />
+                    </label>
+                  )}
                 </div>
                 <button
                   className="primary-button"

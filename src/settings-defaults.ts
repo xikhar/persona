@@ -30,6 +30,8 @@ const SYSTEM_ACTIONS: PersonaAnimationSettings[] = [
     animation_description: 'A calm resting motion for the character.',
     animation_trigger_scenario:
       'Used automatically while Persona is waiting and not speaking.',
+    expression_name: null,
+    expression_weight: 1,
     animation_type: 'IDLE',
     origin: 'packaged',
     system: true,
@@ -46,6 +48,8 @@ const SYSTEM_ACTIONS: PersonaAnimationSettings[] = [
       'Natural conversational body movement while the character speaks.',
     animation_trigger_scenario:
       'Used automatically while supported voice output is active.',
+    expression_name: null,
+    expression_weight: 1,
     animation_type: 'TALK',
     origin: 'packaged',
     system: true,
@@ -138,6 +142,8 @@ export async function loadPackagedSettingsFallback(): Promise<PersonaSettingsSna
     animation_name: animation.animation_name,
     animation_description: animation.animation_description,
     animation_trigger_scenario: animation.animation_trigger_scenario,
+    expression_name: null,
+    expression_weight: 1,
     animation_type: animation.animation_type,
     origin: 'packaged' as const,
     system:

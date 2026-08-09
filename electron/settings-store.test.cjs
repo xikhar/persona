@@ -89,9 +89,18 @@ test("starts with permanent empty Idle and Speaking actions", (context) => {
   assert.deepEqual(snapshot.models, []);
   assert.deepEqual(
     snapshot.animations.map(
-      ({ animation_name, animation_type, removable, asset_urls }) => ({
+      ({
         animation_name,
         animation_type,
+        expression_name,
+        expression_weight,
+        removable,
+        asset_urls,
+      }) => ({
+        animation_name,
+        animation_type,
+        expression_name,
+        expression_weight,
         removable,
         asset_urls,
       }),
@@ -100,12 +109,16 @@ test("starts with permanent empty Idle and Speaking actions", (context) => {
       {
         animation_name: "idle",
         animation_type: "IDLE",
+        expression_name: null,
+        expression_weight: 1,
         removable: false,
         asset_urls: [],
       },
       {
         animation_name: "speaking",
         animation_type: "TALK",
+        expression_name: null,
+        expression_weight: 1,
         removable: false,
         asset_urls: [],
       },
@@ -837,4 +850,98 @@ test("migrates schema 8 scheduler factors and seconds to milliseconds", (context
     entry_ms: [810, 945],
     exit_ms: [630, 855],
   });
+});
+
+test("validates animation expression metadata", () => {
+  const base = {
+    animation_name: "happy",
+    animation_description: "Happy action.",
+    animation_trigger_scenario: "Use when happy.",
+  };
+
+  assert.deepEqual(validateAnimationMetadata(base), {
+    ...base,
+    expression_name: null,
+    expression_weight: 1,
+  });
+
+  assert.deepEqual(
+    validateAnimationMetadata({
+      ...base,
+      expression_name: "sad",
+      expression_weight: 0.75,
+    }),
+    {
+      ...base,
+      expression_name: "sad",
+      expression_weight: 0.75,
+    },
+  );
+
+  assert.throws(
+    () =>
+      validateAnimationMetadata({
+        ...base,
+        expression_name: "smirk",
+        expression_weight: 1,
+      }),
+    /Expression must be/,
+  );
+
+  assert.throws(
+    () =>
+      validateAnimationMetadata({
+        ...base,
+        expression_name: "happy",
+        expression_weight: 1.1,
+      }),
+    /between 0 and 1/,
+  );
+
+  assert.throws(
+    () =>
+      validateAnimationMetadata({
+        ...base,
+        expression_name: "happy",
+        expression_weight: -0.1,
+      }),
+    /between 0 and 1/,
+  );
+});
+
+test("persists animation expression metadata", (context) => {
+  const { userDataPath, packagedLibraryPath } = fixture(context);
+  const store = createSettingsStore({
+    userDataPath,
+    packagedLibraryPath,
+  });
+
+  let snapshot = store.createAnimation({
+    animation_name: "sad-action",
+    animation_description: "A sad action.",
+    animation_trigger_scenario: "Use when sad.",
+    expression_name: "sad",
+    expression_weight: 0.8,
+  });
+
+  let animation = snapshot.animations.find(
+    (candidate) => candidate.animation_name === "sad-action",
+  );
+
+  assert.ok(animation);
+  assert.equal(animation.expression_name, "sad");
+  assert.equal(animation.expression_weight, 0.8);
+
+  const reloaded = createSettingsStore({
+    userDataPath,
+    packagedLibraryPath,
+  }).getSnapshot();
+
+  animation = reloaded.animations.find(
+    (candidate) => candidate.animation_name === "sad-action",
+  );
+
+  assert.ok(animation);
+  assert.equal(animation.expression_name, "sad");
+  assert.equal(animation.expression_weight, 0.8);
 });

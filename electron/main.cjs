@@ -684,6 +684,8 @@ function playConfiguredAnimation(animationName) {
     animation: installedAnimation.animation_type ?? "CUSTOM",
     animationName: installedAnimation.animation_name,
     animationUrls: installedAnimation.asset_urls,
+    expressionName: installedAnimation.expression_name,
+    expressionWeight: installedAnimation.expression_weight,
     source: "command",
     requestId: animationCommandRequestId,
   });

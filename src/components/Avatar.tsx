@@ -19,6 +19,7 @@ import { useVrmLoader } from '../hooks/useVrmLoader';
 import { useVrmAnimation } from '../hooks/useVrmAnimation';
 import { useAmplitudeLipSync } from '../hooks/useAmplitudeLipSync';
 import { useBlink } from '../hooks/useBlink';
+import { useActionExpression } from '../hooks/useActionExpression';
 import {
   animationUrlSignature,
   type PlayableAnimationType,
@@ -86,6 +87,8 @@ interface AvatarProps {
   animationUrls?: readonly string[];
   fallbackAnimationUrls?: readonly string[];
   preloadAnimationUrls?: readonly string[];
+  expressionName?: PersonaExpressionName | null;
+  expressionWeight?: number;
   audioLevel: number;
   bodySpeaking: boolean;
   dragInertia?: DragInertiaState;
@@ -106,6 +109,8 @@ function AvatarModel({
   animationUrls,
   fallbackAnimationUrls,
   preloadAnimationUrls,
+  expressionName,
+  expressionWeight,
   audioLevel,
   bodySpeaking,
   dragInertia,
@@ -131,6 +136,7 @@ function AvatarModel({
   );
   const updateLipSync = useAmplitudeLipSync(vrm);
   const updateBlink = useBlink(vrm);
+  useActionExpression(vrm, expressionName, expressionWeight);
 
   const animationUrlsKey = animationUrlSignature(animationUrls);
   const stableAnimationUrls = useMemo(

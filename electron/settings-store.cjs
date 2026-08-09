@@ -44,6 +44,13 @@ const DEFAULT_SPEAKING_DEBOUNCE_MS = 350;
 const DEFAULT_IDLE_INTERIM_MS = 350;
 const MIN_SCHEDULER_DELAY_MS = 0;
 const MAX_SCHEDULER_DELAY_MS = 3000;
+const STANDARD_VRM_EXPRESSIONS = new Set([
+  "happy",
+  "angry",
+  "sad",
+  "relaxed",
+  "surprised",
+]);
 const ASSET_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_MODEL_LIGHTING = Object.freeze({
@@ -198,6 +205,27 @@ function singleLine(value, field, maxLength) {
   return normalized;
 }
 
+function optionalExpressionName(value) {
+  if (value == null || value === "") return null;
+  if (typeof value !== "string") {
+    throw new Error("Expression must be a string.");
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!STANDARD_VRM_EXPRESSIONS.has(normalized)) {
+    throw new Error("Expression must be happy, angry, sad, relaxed, or surprised.");
+  }
+  return normalized;
+}
+
+function expressionWeight(value) {
+  if (value == null || value === "") return 1;
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized) || normalized < 0 || normalized > 1) {
+    throw new Error("Expression weight must be between 0 and 1.");
+  }
+  return Math.round(normalized * 100) / 100;
+}
+
 function validateAnimationMetadata(metadata) {
   const animation_name = singleLine(
     metadata?.animation_name,
@@ -221,6 +249,8 @@ function validateAnimationMetadata(metadata) {
       "Animation trigger scenario",
       240,
     ),
+    expression_name: optionalExpressionName(metadata?.expression_name),
+    expression_weight: expressionWeight(metadata?.expression_weight),
   };
 }
 
@@ -696,6 +726,8 @@ function createSettingsStore({
           animation_name: metadata.animation_name,
           animation_description: metadata.animation_description,
           animation_trigger_scenario: metadata.animation_trigger_scenario,
+          expression_name: metadata.expression_name ?? null,
+          expression_weight: metadata.expression_weight ?? 1,
           animation_type: animation.animation_type,
           origin: "packaged",
           system,
@@ -713,6 +745,8 @@ function createSettingsStore({
         animation_name: animation.animation_name,
         animation_description: animation.animation_description,
         animation_trigger_scenario: animation.animation_trigger_scenario,
+        expression_name: animation.expression_name ?? null,
+        expression_weight: animation.expression_weight ?? 1,
         animation_type: null,
         origin: "user",
         system: false,
@@ -897,7 +931,9 @@ function createSettingsStore({
         normalized.animation_description ===
           packaged.animation_description &&
         normalized.animation_trigger_scenario ===
-          packaged.animation_trigger_scenario;
+          packaged.animation_trigger_scenario &&
+        normalized.expression_name === (packaged.expression_name ?? null) &&
+        normalized.expression_weight === (packaged.expression_weight ?? 1);
       if (unchanged) {
         delete state.packaged_animation_overrides[animationId];
       } else {

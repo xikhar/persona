@@ -7,6 +7,8 @@ export interface BodyAnimationOverride {
   animation: PlayableAnimationType;
   animationName?: string;
   animationUrls?: string[];
+  expressionName?: PersonaExpressionName | null;
+  expressionWeight?: number;
   requestId: number;
 }
 

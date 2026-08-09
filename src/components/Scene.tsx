@@ -19,6 +19,8 @@ interface SceneProps {
   animationUrls?: readonly string[];
   fallbackAnimationUrls?: readonly string[];
   preloadAnimationUrls?: readonly string[];
+  expressionName?: PersonaExpressionName | null;
+  expressionWeight?: number;
   audioLevel: number;
   bodySpeaking: boolean;
   characterSize: number;
