@@ -192,3 +192,118 @@ test("infers live roles from reserved animation names and numbered variants", ()
   assert.equal(inferAnimationType("wave-hello"), null);
   assert.equal(inferAnimationType(null), null);
 });
+
+test("preserves packaged animation expression metadata", () => {
+  const catalog = validatePackagedLibrary({
+    schema_version: 1,
+    default_model_id: null,
+    models: [],
+    animations: [
+      {
+        id: "packaged-happy",
+        animation_name: "happy",
+        animation_description: "A happy reaction.",
+        animation_trigger_scenario: "Use for positive moments.",
+        animation_type: "HAPPY",
+        expression_name: "happy",
+        expression_weight: 0.75,
+        asset_paths: ["animations/happy.vrma"],
+      },
+    ],
+  });
+
+  const animation = catalog.animations.find(
+    (item) => item.id === "packaged-happy",
+  );
+
+  assert.ok(animation);
+  assert.equal(animation.expression_name, "happy");
+  assert.equal(animation.expression_weight, 0.75);
+});
+
+test("defaults missing packaged animation expression metadata", () => {
+  const catalog = validatePackagedLibrary({
+    schema_version: 1,
+    default_model_id: null,
+    models: [],
+    animations: [
+      {
+        id: "packaged-wave",
+        animation_name: "wave",
+        animation_description: "A friendly wave.",
+        animation_trigger_scenario: "Use when greeting someone.",
+        animation_type: null,
+        asset_paths: ["animations/wave.vrma"],
+      },
+    ],
+  });
+
+  const animation = catalog.animations.find(
+    (item) => item.id === "packaged-wave",
+  );
+
+  assert.ok(animation);
+  assert.equal(animation.expression_name, null);
+  assert.equal(animation.expression_weight, 1);
+});
+
+test("rejects invalid packaged animation expression metadata", () => {
+  const animation = {
+    id: "packaged-happy",
+    animation_name: "happy",
+    animation_description: "A happy reaction.",
+    animation_trigger_scenario: "Use for positive moments.",
+    animation_type: "HAPPY",
+    asset_paths: ["animations/happy.vrma"],
+  };
+
+  assert.throws(
+    () =>
+      validatePackagedLibrary({
+        schema_version: 1,
+        default_model_id: null,
+        models: [],
+        animations: [
+          {
+            ...animation,
+            expression_name: "smirk",
+          },
+        ],
+      }),
+    /Invalid packaged expression name/,
+  );
+
+  assert.throws(
+    () =>
+      validatePackagedLibrary({
+        schema_version: 1,
+        default_model_id: null,
+        models: [],
+        animations: [
+          {
+            ...animation,
+            expression_name: "happy",
+            expression_weight: -0.1,
+          },
+        ],
+      }),
+    /Invalid packaged expression weight/,
+  );
+
+  assert.throws(
+    () =>
+      validatePackagedLibrary({
+        schema_version: 1,
+        default_model_id: null,
+        models: [],
+        animations: [
+          {
+            ...animation,
+            expression_name: "happy",
+            expression_weight: 1.1,
+          },
+        ],
+      }),
+    /Invalid packaged expression weight/,
+  );
+});

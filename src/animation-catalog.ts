@@ -49,3 +49,12 @@ export function randomAnimationUrl(
   );
   return candidates[randomIndex] ?? null;
 }
+
+export function animationExpression(
+  animation: PersonaAnimationSettings | null | undefined,
+) {
+  return {
+    expressionName: animation?.expression_name ?? null,
+    expressionWeight: animation?.expression_weight ?? 1,
+  };
+}

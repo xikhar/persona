@@ -136,7 +136,11 @@ function AvatarModel({
   );
   const updateLipSync = useAmplitudeLipSync(vrm);
   const updateBlink = useBlink(vrm);
-  useActionExpression(vrm, expressionName, expressionWeight);
+  const updateActionExpression = useActionExpression(
+    vrm,
+    expressionName,
+    expressionWeight,
+  );
 
   const animationUrlsKey = animationUrlSignature(animationUrls);
   const stableAnimationUrls = useMemo(
@@ -182,6 +186,7 @@ function AvatarModel({
   useFrame((state, delta) => {
     if (!vrm) return;
     updateAnimation(delta);
+    updateActionExpression();
     updateBlink(delta);
     updateLipSync(delta, audioLevel, speaking || bodySpeaking);
 

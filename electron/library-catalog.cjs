@@ -14,6 +14,15 @@ const ANIMATION_TYPES = new Set([
   "FINGER_GUN",
   "DANCE",
 ]);
+
+const EXPRESSION_NAMES = new Set([
+  'happy',
+  'angry',
+  'sad',
+  'relaxed',
+  'surprised',
+]);
+
 const SYSTEM_ANIMATIONS = Object.freeze([
   Object.freeze({
     id: "system-idle",
@@ -22,6 +31,8 @@ const SYSTEM_ANIMATIONS = Object.freeze([
     animation_trigger_scenario:
       "Used automatically while Persona is waiting and not speaking.",
     animation_type: "IDLE",
+    expression_name: null,
+    expression_weight: 1,
     asset_paths: Object.freeze([]),
   }),
   Object.freeze({
@@ -116,22 +127,49 @@ function validatePackagedLibrary(value) {
     if (!LIBRARY_ID_PATTERN.test(id)) {
       throw new Error(`Invalid packaged animation id: ${id}.`);
     }
+
     const animation_name = nonEmptyString(
       animation?.animation_name,
       `animations[${index}].animation_name`,
     ).toLowerCase();
+
     if (!ANIMATION_NAME_PATTERN.test(animation_name)) {
       throw new Error(`Invalid packaged animation name: ${animation_name}.`);
     }
+
     const animation_type = animation?.animation_type ?? null;
     if (animation_type !== null && !ANIMATION_TYPES.has(animation_type)) {
       throw new Error(`Invalid packaged animation type: ${animation_type}.`);
     }
+
+    const expression_name = animation?.expression_name ?? null;
+    if (
+      expression_name !== null &&
+      !EXPRESSION_NAMES.has(expression_name)
+    ) {
+      throw new Error(
+        `Invalid packaged expression name: ${expression_name}.`,
+      );
+    }
+
+    const expression_weight = animation?.expression_weight ?? 1;
+    if (
+      typeof expression_weight !== 'number' ||
+      !Number.isFinite(expression_weight) ||
+      expression_weight < 0 ||
+      expression_weight > 1
+    ) {
+      throw new Error(
+        `Invalid packaged expression weight for ${animation_name}.`,
+      );
+    }
+
     if (!Array.isArray(animation?.asset_paths)) {
       throw new Error(
         `Packaged animation ${animation_name} must declare asset_paths.`,
       );
     }
+
     return {
       id,
       animation_name,
@@ -144,10 +182,12 @@ function validatePackagedLibrary(value) {
         `animations[${index}].animation_trigger_scenario`,
       ),
       animation_type,
+      expression_name,
+      expression_weight,
       asset_paths: animation.asset_paths.map((entry, assetIndex) =>
         assetPath(
           entry,
-          ".vrma",
+          '.vrma',
           `animations[${index}].asset_paths[${assetIndex}]`,
         ),
       ),

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  animationExpression,
   animationUrlSignature,
   animationUrlsForType,
   immediateVoiceAnimation,
@@ -84,4 +85,22 @@ describe('Persona animation contract', () => {
       animationUrlSignature(['two.vrma', 'one.vrma']),
     );
   });
+
+  it('resolves expression metadata for Settings previews', () => {
+    expect(
+      animationExpression({
+        expression_name: 'sad',
+        expression_weight: 0.75,
+      } as PersonaAnimationSettings),
+    ).toEqual({
+      expressionName: 'sad',
+      expressionWeight: 0.75,
+    });
+
+    expect(animationExpression(null)).toEqual({
+      expressionName: null,
+      expressionWeight: 1,
+    });
+  });
 });
+

@@ -61,6 +61,8 @@
       "animation_description": "A warm, upbeat reaction.",
       "animation_trigger_scenario": "Use for good news, success, gratitude, or a positive response.",
       "animation_type": "HAPPY",
+      "expression_name": "happy",
+      "expression_weight": 1,
       "asset_paths": [
         "animations/happy.vrma"
       ]

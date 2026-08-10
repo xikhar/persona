@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { Scene } from './Scene';
 import {
+  animationExpression,
   animationUrlsForType,
   type PlayableAnimationType,
 } from '../animation-catalog';
@@ -572,6 +573,7 @@ export function SettingsPage() {
   const previewType: PlayableAnimationType =
     previewAnimation?.animation_type ??
     (previewAnimation ? 'CUSTOM' : 'IDLE');
+  const previewExpression = animationExpression(previewAnimation);
   const idleAnimationUrls = useMemo(
     () => animationUrlsForType(settings.animations, 'IDLE'),
     [settings.animations],
@@ -3484,6 +3486,8 @@ export function SettingsPage() {
                   animationRequest={previewRequest}
                   animationUrls={previewAnimationUrls}
                   fallbackAnimationUrls={idleAnimationUrls}
+                  expressionName={previewExpression.expressionName}
+                  expressionWeight={previewExpression.expressionWeight}
                   audioLevel={0}
                   bodySpeaking={previewType === 'TALK'}
                   characterSize={settings.character_size}
