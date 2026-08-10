@@ -43,6 +43,8 @@ const SYSTEM_ANIMATIONS = Object.freeze([
     animation_trigger_scenario:
       "Used automatically while supported voice output is active.",
     animation_type: "TALK",
+    expression_name: null,
+    expression_weight: 1,
     asset_paths: Object.freeze([]),
   }),
 ]);

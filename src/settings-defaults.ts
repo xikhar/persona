@@ -19,6 +19,8 @@ interface PackagedLibraryDocument {
     animation_description: string;
     animation_trigger_scenario: string;
     animation_type: PersonaAnimationType | null;
+    expression_name?: PersonaExpressionName | null;
+    expression_weight?: number;
     asset_paths: string[];
   }>;
 }
@@ -142,8 +144,8 @@ export async function loadPackagedSettingsFallback(): Promise<PersonaSettingsSna
     animation_name: animation.animation_name,
     animation_description: animation.animation_description,
     animation_trigger_scenario: animation.animation_trigger_scenario,
-    expression_name: null,
-    expression_weight: 1,
+    expression_name: animation.expression_name ?? null,
+    expression_weight: animation.expression_weight ?? 1,
     animation_type: animation.animation_type,
     origin: 'packaged' as const,
     system:

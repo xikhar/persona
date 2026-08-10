@@ -79,6 +79,16 @@ test("keeps the permanent system actions in the packaged library", () => {
       },
     ],
   );
+  assert.deepEqual(
+    library.animations.map(({ expression_name, expression_weight }) => ({
+      expression_name,
+      expression_weight,
+    })),
+    [
+      { expression_name: null, expression_weight: 1 },
+      { expression_name: null, expression_weight: 1 },
+    ],
+  );
 });
 
 test("keeps the local packaged-library example valid and complete", () => {
