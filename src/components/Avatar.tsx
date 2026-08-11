@@ -95,7 +95,10 @@ interface AvatarProps {
   modelUrl: string;
   onAnimationComplete: () => void;
 
-  onExpressionsChange?: (expressions: readonly string[]) => void;
+  onExpressionsChange?: (
+    modelUrl: string,
+    expressions: readonly string[],
+  ) => void;
 
   playback: 'loop' | 'once';
   speaking: boolean;
@@ -152,8 +155,8 @@ function AvatarModel({
         (expression) => expression.expressionName,
       ) ?? [];
 
-    onExpressionsChange?.(expressions);
-  }, [onExpressionsChange, vrm]);
+    onExpressionsChange?.(modelUrl, expressions);
+  }, [modelUrl, onExpressionsChange, vrm]);
 
   const animationUrlsKey = animationUrlSignature(animationUrls);
   const stableAnimationUrls = useMemo(

@@ -23,7 +23,10 @@ interface SceneProps {
   expressionWeight?: number;
   audioLevel: number;
   bodySpeaking: boolean;
-  onExpressionsChange?: (expressions: readonly string[]) => void;
+  onExpressionsChange?: (
+    modelUrl: string,
+    expressions: readonly string[],
+  ) => void;
   characterSize: number;
   dragInertia?: DragInertiaState;
   enablePan?: boolean;
