@@ -44,13 +44,6 @@ const DEFAULT_SPEAKING_DEBOUNCE_MS = 350;
 const DEFAULT_IDLE_INTERIM_MS = 350;
 const MIN_SCHEDULER_DELAY_MS = 0;
 const MAX_SCHEDULER_DELAY_MS = 3000;
-const STANDARD_VRM_EXPRESSIONS = new Set([
-  "happy",
-  "angry",
-  "sad",
-  "relaxed",
-  "surprised",
-]);
 const ASSET_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_MODEL_LIGHTING = Object.freeze({
@@ -207,14 +200,22 @@ function singleLine(value, field, maxLength) {
 
 function optionalExpressionName(value) {
   if (value == null || value === "") return null;
+
   if (typeof value !== "string") {
     throw new Error("Expression must be a string.");
   }
-  const normalized = value.trim().toLowerCase();
-  if (!STANDARD_VRM_EXPRESSIONS.has(normalized)) {
-    throw new Error("Expression must be happy, angry, sad, relaxed, or surprised.");
+
+  const trimmed = value.trim();
+
+  if (trimmed.length === 0) {
+    return null;
   }
-  return normalized;
+
+  if (trimmed.length > 120) {
+    throw new Error("Expression must be 120 characters or fewer.");
+  }
+
+  return trimmed;
 }
 
 function expressionWeight(value) {

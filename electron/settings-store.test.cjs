@@ -878,14 +878,40 @@ test("validates animation expression metadata", () => {
     },
   );
 
+  assert.deepEqual(
+    validateAnimationMetadata({
+      ...base,
+      expression_name: "Blush",
+      expression_weight: 1,
+    }),
+    {
+      ...base,
+      expression_name: "Blush",
+      expression_weight: 1,
+    },
+  );
+
+  assert.deepEqual(
+    validateAnimationMetadata({
+      ...base,
+      expression_name: "   ",
+      expression_weight: 1,
+    }),
+    {
+      ...base,
+      expression_name: null,
+      expression_weight: 1,
+    },
+  );
+
   assert.throws(
     () =>
       validateAnimationMetadata({
         ...base,
-        expression_name: "smirk",
+        expression_name: "x".repeat(121),
         expression_weight: 1,
       }),
-    /Expression must be/,
+    /120 characters or fewer/,
   );
 
   assert.throws(
@@ -917,19 +943,19 @@ test("persists animation expression metadata", (context) => {
   });
 
   let snapshot = store.createAnimation({
-    animation_name: "sad-action",
-    animation_description: "A sad action.",
-    animation_trigger_scenario: "Use when sad.",
-    expression_name: "sad",
+    animation_name: "embarrassed",
+    animation_description: "An embarrassed action.",
+    animation_trigger_scenario: "Use when embarrassed.",
+    expression_name: "Blush",
     expression_weight: 0.8,
   });
 
   let animation = snapshot.animations.find(
-    (candidate) => candidate.animation_name === "sad-action",
+    (candidate) => candidate.animation_name === "embarrassed",
   );
 
   assert.ok(animation);
-  assert.equal(animation.expression_name, "sad");
+  assert.equal(animation.expression_name, "Blush");
   assert.equal(animation.expression_weight, 0.8);
 
   const reloaded = createSettingsStore({
@@ -938,10 +964,10 @@ test("persists animation expression metadata", (context) => {
   }).getSnapshot();
 
   animation = reloaded.animations.find(
-    (candidate) => candidate.animation_name === "sad-action",
+    (candidate) => candidate.animation_name === "embarrassed",
   );
 
   assert.ok(animation);
-  assert.equal(animation.expression_name, "sad");
+  assert.equal(animation.expression_name, "Blush");
   assert.equal(animation.expression_weight, 0.8);
 });

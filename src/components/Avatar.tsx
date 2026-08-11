@@ -94,6 +94,9 @@ interface AvatarProps {
   dragInertia?: DragInertiaState;
   modelUrl: string;
   onAnimationComplete: () => void;
+
+  onExpressionsChange?: (expressions: readonly string[]) => void;
+
   playback: 'loop' | 'once';
   speaking: boolean;
   bodyTransitionMs: number;
@@ -116,6 +119,7 @@ function AvatarModel({
   dragInertia,
   modelUrl,
   onAnimationComplete,
+  onExpressionsChange,
   playback,
   speaking,
   bodyTransitionMs,
@@ -141,6 +145,15 @@ function AvatarModel({
     expressionName,
     expressionWeight,
   );
+
+  useEffect(() => {
+    const expressions =
+      vrm?.expressionManager?.expressions.map(
+        (expression) => expression.expressionName,
+      ) ?? [];
+
+    onExpressionsChange?.(expressions);
+  }, [onExpressionsChange, vrm]);
 
   const animationUrlsKey = animationUrlSignature(animationUrls);
   const stableAnimationUrls = useMemo(

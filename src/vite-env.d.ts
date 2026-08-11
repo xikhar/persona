@@ -44,12 +44,7 @@ type PersonaAnimationType =
   | 'DANCE';
 
 
-type PersonaExpressionName =
-  | 'happy'
-  | 'angry'
-  | 'sad'
-  | 'relaxed'
-  | 'surprised';
+type PersonaExpressionName = string;
 
 interface PersonaModelSettings {
   id: string;

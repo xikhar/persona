@@ -276,7 +276,7 @@ test("rejects invalid packaged animation expression metadata", () => {
         animations: [
           {
             ...animation,
-            expression_name: "smirk",
+            expression_name: "x".repeat(121),
           },
         ],
       }),

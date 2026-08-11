@@ -15,14 +15,6 @@ const ANIMATION_TYPES = new Set([
   "DANCE",
 ]);
 
-const EXPRESSION_NAMES = new Set([
-  'happy',
-  'angry',
-  'sad',
-  'relaxed',
-  'surprised',
-]);
-
 const SYSTEM_ANIMATIONS = Object.freeze([
   Object.freeze({
     id: "system-idle",
@@ -147,7 +139,11 @@ function validatePackagedLibrary(value) {
     const expression_name = animation?.expression_name ?? null;
     if (
       expression_name !== null &&
-      !EXPRESSION_NAMES.has(expression_name)
+      (
+        typeof expression_name !== 'string' ||
+        expression_name.trim().length === 0 ||
+        expression_name.length > 120
+      )
     ) {
       throw new Error(
         `Invalid packaged expression name: ${expression_name}.`,
