@@ -15,6 +15,24 @@ Persona has four intentionally narrow layers:
 
 No renderer code has filesystem, process, or raw-audio access.
 
+All renderer, Electron, Node tooling, and JavaScript-side test source is
+TypeScript. Electron and Node entry points use `.cts` so their generated
+CommonJS retains Electron's packaged runtime contract. `npm run build:runtime`
+removes stale generated output, then compiles production sources to ignored
+`.cjs` files beside them; edit the TypeScript sources, never generated files.
+Tests use the dedicated `tsconfig.runtime.test.json` compilation, which also
+includes test sources. Normal development, test, build, asset, native, and
+packaging commands run the appropriate compilation automatically.
+
+`npm run dev` watches the renderer and runtime TypeScript independently and
+restarts Electron after generated runtime modules change. Electron runtime
+code is checked against Node 22 declarations to match Electron 39's embedded
+Node version; repository tools deliberately use that same compatible subset
+even though contributors run them with the Node 24 version required below.
+The preload and renderer share their complete cross-process API contract from
+`shared/persona-api.d.ts`; update that contract and the typed preload object
+together whenever an exposed event or method changes.
+
 ## Settings and local media
 
 `public/assets/library.json` declares the immutable library shipped with the
@@ -31,7 +49,7 @@ copyable examples for the ignored local test media. Packaged models live under
 `public/assets/models/` and animations under `public/assets/animations/`. When
 a non-empty catalog omits an explicit default, its first model becomes active.
 
-`electron/settings-store.cjs` owns the mutable per-user library and merges it
+`electron/settings-store.cts` owns the mutable per-user library and merges it
 with the packaged catalog. Animation actions and their VRMA clips are separate
 records: an action owns MCP metadata and can contain multiple numbered clips.
 The renderer sends metadata through the sandboxed preload, the main process
@@ -186,7 +204,7 @@ not have a secure credential store available during development.
 
 ## MCP contract
 
-`electron/mcp-server.cjs` owns the Codex-facing tool schemas and translates
+`electron/mcp-server.cts` owns the Codex-facing tool schemas and translates
 validated tool calls into narrow main-process callbacks. It does not receive
 the Electron application object, renderer access, arbitrary animation paths, or
 shell execution.
@@ -228,8 +246,8 @@ finishes the Idle route and its configured interim before returning to a new
 Speaking chunk.
 
 Voice-source validation and stable identities are shared through
-`electron/voice-source.cjs`; discovery lives in
-`electron/voice-source-discovery.cjs`. Settings supports automatic detection,
+`electron/voice-source.cts`; discovery lives in
+`electron/voice-source-discovery.cts`. Settings supports automatic detection,
 an exact application or PipeWire stream, an advanced regex, and external event
 mode. `PERSONA_TARGET_PROCESS_PATTERN` overrides automatic and advanced
 matching when set. Every source change recreates the listener immediately.

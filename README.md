@@ -150,7 +150,7 @@ Outputs are written to `release/`. Windows needs Visual Studio Build Tools with
 the C++ desktop workload. macOS needs Xcode Command Line Tools and macOS 14.2+
 SDK support.
 
-GitHub Actions runs the full JavaScript, renderer, native compile, and native
+GitHub Actions runs the full TypeScript, renderer, native compile, and native
 self-test suite on Linux, Windows, and macOS. Prerelease tags shaped like
 `v0.1.0-beta.0` create native packages and a checksum file, but only after the
 asset release gate passes. See [Releasing](docs/RELEASING.md).

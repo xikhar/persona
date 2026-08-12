@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.runtime.json",
+  "include": ["electron/**/*.cts", "scripts/**/*.cts"],
+  "exclude": []
+}

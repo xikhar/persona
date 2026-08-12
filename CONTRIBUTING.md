@@ -78,7 +78,7 @@ Keep these architectural constraints intact:
   protocols.
 - Settings mutations and VRoid Hub operations stay restricted to the Settings
   window; both windows share one preload, so new channels register through
-  `electron/settings-ipc.cjs`.
+  `electron/settings-ipc.cts`.
 - The integration and MCP server remain loopback-only and accept bounded,
   validated inputs.
 - MCP tools describe Persona actions, not arbitrary Electron or operating
@@ -90,6 +90,12 @@ Keep these architectural constraints intact:
 
 Read [Developing Persona](docs/DEVELOPMENT.md) and
 [Integrations](docs/INTEGRATIONS.md) before changing these areas.
+
+Electron and Node sources use `.cts` and compile to ignored `.cjs` runtime
+files. Do not edit or commit generated `.cjs` files; `npm run build:runtime`
+cleans stale output before compiling production sources and is already included
+in the standard commands. `npm run dev` also watches runtime sources and
+restarts Electron when their generated output changes.
 
 ## Making changes
 

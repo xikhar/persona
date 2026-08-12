@@ -12,5 +12,10 @@
     "noEmit": true,
     "strict": true
   },
-  "include": ["vite.config.ts", "vitest.config.ts"]
+  "include": [
+    "eslint.config.ts",
+    "scripts/**/*.mts",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ]
 }

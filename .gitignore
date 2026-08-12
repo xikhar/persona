@@ -13,6 +13,12 @@ coverage/
 *.tsbuildinfo
 *.tgz
 
+# JavaScript emitted from the TypeScript Electron runtime and project tools
+electron/**/*.cjs
+electron/**/*.cjs.map
+scripts/**/*.cjs
+scripts/**/*.cjs.map
+
 # Local character media
 *.vrm
 *.vrma

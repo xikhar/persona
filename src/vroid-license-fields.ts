@@ -162,13 +162,18 @@ export function vroidLicenseRows(
 ): VroidLicenseRow[] {
   if (!license) return [];
 
-  const fields: VroidLicenseField[] =
-    license.spec_version === '1.0' ? VROID_LICENSE_FIELDS_V1 : VROID_LICENSE_FIELDS_V0;
-  const values = license as unknown as Record<string, unknown>;
+  function rowsFor<TLicense extends object>(
+    value: TLicense,
+    fields: readonly VroidLicenseField<Extract<keyof TLicense, string>>[],
+  ): VroidLicenseRow[] {
+    return fields.map(({ key, label, values: displayValues }) => {
+      const raw = value[key];
+      if (raw == null) return { label, value: 'Not set' };
+      return { label, value: displayValues[String(raw)] ?? String(raw) };
+    });
+  }
 
-  return fields.map(({ key, label, values: displayValues }) => {
-    const raw = values[key];
-    if (raw == null) return { label, value: 'Not set' };
-    return { label, value: displayValues[String(raw)] ?? String(raw) };
-  });
+  return license.spec_version === '1.0'
+    ? rowsFor(license, VROID_LICENSE_FIELDS_V1)
+    : rowsFor(license, VROID_LICENSE_FIELDS_V0);
 }

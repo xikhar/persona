@@ -41,7 +41,7 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test JavaScript and renderer behavior
+      - name: Test runtime and renderer behavior
         run: npm test
 
       - name: Validate the asset contract
