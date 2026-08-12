@@ -777,6 +777,20 @@ function playConfiguredAnimation(animationName: string): boolean {
   return true;
 }
 
+function holdConfiguredExpression(animationName: string): boolean {
+  if (!hasConfiguredModel()) return false;
+  const installedAnimation = settingsStore?.getAnimation(animationName);
+  if (installedAnimation == null || !installedAnimation.expression_name) {
+    return false;
+  }
+  handleBridgeEvent({
+    type: "expression-hold",
+    expressionName: installedAnimation.expression_name,
+    expressionWeight: installedAnimation.expression_weight,
+  });
+  return true;
+}
+
 function selectAssetFile(kind: AssetKind, multiple: true): Promise<string[]>;
 function selectAssetFile(
   kind: AssetKind,
@@ -865,6 +879,9 @@ function handleBridgeEvent(event: AvatarRendererEvent): void {
 function handleIntegrationEvent(event: IntegrationEvent): boolean {
   if (event.type === "animation-command") {
     return playConfiguredAnimation(event.animationName);
+  }
+  if (event.type === "expression-hold-command") {
+    return holdConfiguredExpression(event.animationName);
   }
   handleBridgeEvent(event);
   return true;

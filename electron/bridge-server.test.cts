@@ -73,6 +73,13 @@ test("normalizes voice events and configured animation commands", () => {
     level: 1,
   });
   assert.deepEqual(
+    normalizeEvent({ type: "expression-hold", animation_name: "wave-hello" }),
+    { type: "expression-hold-command", animationName: "wave-hello" },
+  );
+  assert.deepEqual(normalizeEvent({ type: "expression-release" }), {
+    type: "expression-release",
+  });
+  assert.deepEqual(
     normalizeEvent({ type: "animation", animation_name: "wave-hello" }),
     {
       type: "animation-command",

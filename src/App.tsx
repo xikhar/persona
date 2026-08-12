@@ -49,6 +49,10 @@ export function App() {
   const [voiceAnimation, setVoiceAnimation] = useState<AnimationType>('IDLE');
   const [bodyOverride, setBodyOverride] =
     useState<BodyAnimationOverride | null>(null);
+  const [heldExpression, setHeldExpression] = useState<{
+    name: PersonaExpressionName;
+    weight: number;
+  } | null>(null);
   const [settings, setSettings] =
     useState<PersonaSettingsSnapshot>(SETTINGS_FALLBACK);
 
@@ -73,6 +77,13 @@ export function App() {
         if (event.level > BODY_SPEECH_LEVEL_THRESHOLD) {
           setVoiceAnimation('TALK');
         }
+      } else if (event.type === 'expression-hold') {
+        setHeldExpression({
+          name: event.expressionName,
+          weight: event.expressionWeight ?? 1,
+        });
+      } else if (event.type === 'expression-release') {
+        setHeldExpression(null);
       } else if (event.type === 'animation') {
         if (event.requestId != null) {
           setBodyOverride({
@@ -157,8 +168,8 @@ export function App() {
         animationUrls={animationUrls}
         fallbackAnimationUrls={idleAnimationUrls}
         preloadAnimationUrls={preloadAnimationUrls}
-        expressionName={bodyOverride?.expressionName}
-        expressionWeight={bodyOverride?.expressionWeight}
+        expressionName={heldExpression?.name ?? bodyOverride?.expressionName}
+        expressionWeight={heldExpression?.weight ?? bodyOverride?.expressionWeight}
         audioLevel={audioLevel}
         bodySpeaking={bodySpeaking}
         characterSize={settings.character_size}

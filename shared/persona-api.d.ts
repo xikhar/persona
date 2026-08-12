@@ -81,7 +81,21 @@ export interface AnimationPlaybackEvent {
   requestId: number;
 }
 
-export type AvatarRendererEvent = BridgeEvent | AnimationPlaybackEvent;
+export interface ExpressionHoldEvent {
+  type: 'expression-hold';
+  expressionName: PersonaExpressionName;
+  expressionWeight?: number;
+}
+
+export interface ExpressionReleaseEvent {
+  type: 'expression-release';
+}
+
+export type AvatarRendererEvent =
+  | BridgeEvent
+  | AnimationPlaybackEvent
+  | ExpressionHoldEvent
+  | ExpressionReleaseEvent;
 
 export interface PersonaLightingSettings {
   tone_mapping: 'none' | 'aces';

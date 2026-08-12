@@ -19,8 +19,19 @@ export interface AnimationCommandEvent {
   animationName: string;
 }
 
+export interface ExpressionHoldCommandEvent {
+  type: 'expression-hold-command';
+  animationName: string;
+}
+
+export interface ExpressionReleaseCommandEvent {
+  type: 'expression-release';
+}
+
 export type IntegrationEvent =
   | AnimationCommandEvent
+  | ExpressionHoldCommandEvent
+  | ExpressionReleaseCommandEvent
   | AudioLevelEvent
   | VoiceStateEvent;
 
@@ -108,6 +119,20 @@ export function normalizeEvent(value: unknown): IntegrationEvent | null {
     const level = Math.max(0, Math.min(1, Number(value.level)));
     const bands = isRecord(value.bands) ? value.bands : undefined;
     return { type: 'audio-level', level, ...(bands ? { bands } : {}) };
+  }
+  if (
+    value.type === 'expression-hold' &&
+    typeof value.animation_name === 'string' &&
+    ANIMATION_NAME_PATTERN.test(value.animation_name)
+  ) {
+    return {
+      type: 'expression-hold-command',
+      animationName: value.animation_name,
+    };
+  }
+
+  if (value.type === 'expression-release') {
+    return { type: 'expression-release' };
   }
   if (
     value.type === 'animation' &&
