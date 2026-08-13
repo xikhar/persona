@@ -38,6 +38,8 @@ jobs:
   package:
     name: Package ${{ matrix.name }}
     needs: release-gate
+    env:
+      MAC_SIGNING_AVAILABLE: ${{ secrets.MAC_CSC_LINK != '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -79,16 +81,28 @@ jobs:
       - name: Lint and test
         run: npm run check
 
-      - name: Build native installer
+      - name: Build signed macOS installer
+        if: matrix.platform == 'macos' && env.MAC_SIGNING_AVAILABLE == 'true'
         run: ${{ matrix.command }}
         env:
-          CSC_LINK: ${{ matrix.platform == 'macos' && secrets.MAC_CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ matrix.platform == 'macos' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
-          APPLE_ID: ${{ matrix.platform == 'macos' && secrets.APPLE_ID || '' }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'macos' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ matrix.platform == 'macos' && secrets.APPLE_TEAM_ID || '' }}
-          WIN_CSC_LINK: ${{ matrix.platform == 'windows' && secrets.WIN_CSC_LINK || '' }}
-          WIN_CSC_KEY_PASSWORD: ${{ matrix.platform == 'windows' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Build unsigned macOS installer
+        if: matrix.platform == 'macos' && env.MAC_SIGNING_AVAILABLE != 'true'
+        run: ${{ matrix.command }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Build non-macOS installer
+        if: matrix.platform != 'macos'
+        run: ${{ matrix.command }}
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
       - name: Upload installers
         uses: actions/upload-artifact@v7
