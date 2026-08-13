@@ -25,7 +25,7 @@ export interface ExpressionHoldCommandEvent {
 }
 
 export interface ExpressionReleaseCommandEvent {
-  type: 'expression-release';
+  type: 'expression-release-command';
 }
 
 export type IntegrationEvent =
@@ -130,9 +130,8 @@ export function normalizeEvent(value: unknown): IntegrationEvent | null {
       animationName: value.animation_name,
     };
   }
-
   if (value.type === 'expression-release') {
-    return { type: 'expression-release' };
+    return { type: 'expression-release-command' };
   }
   if (
     value.type === 'animation' &&

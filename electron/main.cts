@@ -69,6 +69,7 @@ import {
 } from './audio-listener.cjs';
 import { listVoiceSources } from './voice-source-discovery.cjs';
 import { isAllowedRendererNavigation } from './navigation-policy.cjs';
+import { PendingRendererEvents } from './renderer-event-queue.cjs';
 import { createSettingsIpcGate } from './settings-ipc.cjs';
 import { snapshotHasConfiguredModel } from './model-readiness.cjs';
 import { parseProtocolUrl, voiceState } from './protocol-actions.cjs';
@@ -111,6 +112,10 @@ const SETTINGS_WINDOW_BACKGROUND = {
   light: "#e6e8ec",
 };
 const PERSONA_ASSET_SCHEME = "persona-asset";
+// An integration that crashes, is killed, or simply forgets to send
+// expression-release would otherwise leave the character's face frozen with no
+// way for the user to recover it. Drop a held expression after this long.
+const EXPRESSION_HOLD_TIMEOUT_MS = 5 * 60_000;
 const startInBackground = process.argv.includes("--background");
 const startInSettings = process.argv.includes("--settings");
 const protocolScheme = "persona";
@@ -145,7 +150,9 @@ let mcpServerPort = Number(
   process.env.PERSONA_BRIDGE_PORT || DEFAULT_PORT,
 );
 let mcpAnimationCatalogSignature: string | null = null;
-const pendingRendererEvents = new Map<AvatarRendererEvent['type'], AvatarRendererEvent>();
+let heldExpressionName: string | null = null;
+let heldExpressionTimer: NodeJS.Timeout | null = null;
+const pendingRendererEvents = new PendingRendererEvents();
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -284,6 +291,7 @@ async function hideOverlay(): Promise<void> {
 }
 
 function destroyOverlayForSetup(): void {
+  releaseHeldExpression("reset");
   clearHyprlandConfigurationTimer();
   hyprlandConfigurationGeneration += 1;
   hyprlandConfigurationTimer = null;
@@ -777,12 +785,44 @@ function playConfiguredAnimation(animationName: string): boolean {
   return true;
 }
 
+function clearHeldExpressionTimer(): void {
+  if (heldExpressionTimer) {
+    clearTimeout(heldExpressionTimer);
+    heldExpressionTimer = null;
+  }
+}
+
+// Releasing when nothing is held is a no-op rather than an error: an
+// integration that lost track of its own state should be able to send
+// expression-release blindly and end up in the default lifecycle.
+function releaseHeldExpression(
+  reason: "integration" | "timeout" | "reset",
+): void {
+  clearHeldExpressionTimer();
+  if (heldExpressionName == null) return;
+  debugLog("expression release", { expression: heldExpressionName, reason });
+  heldExpressionName = null;
+  // A reset destroys the overlay and clears the pending queue on the next
+  // statement, so there is no renderer left to tell.
+  if (reason !== "reset") handleBridgeEvent({ type: "expression-release" });
+}
+
+// Unlike playConfiguredAnimation this deliberately does not require
+// asset_urls: holding an expression never plays the VRMA, so an action whose
+// clips are missing can still contribute its configured expression.
 function holdConfiguredExpression(animationName: string): boolean {
   if (!hasConfiguredModel()) return false;
   const installedAnimation = settingsStore?.getAnimation(animationName);
   if (installedAnimation == null || !installedAnimation.expression_name) {
     return false;
   }
+  clearHeldExpressionTimer();
+  heldExpressionName = installedAnimation.expression_name;
+  heldExpressionTimer = setTimeout(
+    () => releaseHeldExpression("timeout"),
+    EXPRESSION_HOLD_TIMEOUT_MS,
+  );
+  heldExpressionTimer.unref?.();
   handleBridgeEvent({
     type: "expression-hold",
     expressionName: installedAnimation.expression_name,
@@ -822,10 +862,9 @@ async function selectAssetFile(
 function flushPendingRendererEvents(): void {
   rendererLoadHookAttached = false;
   if (!avatarWindow || avatarWindow.isDestroyed() || avatarWindow.webContents.isLoading()) return;
-  for (const event of pendingRendererEvents.values()) {
+  for (const event of pendingRendererEvents.drain()) {
     avatarWindow.webContents.send("persona:event", event);
   }
-  pendingRendererEvents.clear();
 }
 
 function ensureRendererLoadHook(): void {
@@ -843,14 +882,14 @@ function ensureRendererLoadHook(): void {
 
 function emitToRenderer(event: AvatarRendererEvent): void {
   latestEvent = event;
-  pendingRendererEvents.set(event.type, event);
+  const pendingKey = pendingRendererEvents.add(event);
   if (!avatarWindow || avatarWindow.isDestroyed()) return;
   if (avatarWindow.webContents.isLoading()) {
     ensureRendererLoadHook();
     return;
   }
   avatarWindow.webContents.send("persona:event", event);
-  pendingRendererEvents.delete(event.type);
+  pendingRendererEvents.delete(pendingKey);
 }
 
 function handleBridgeEvent(event: AvatarRendererEvent): void {
@@ -882,6 +921,10 @@ function handleIntegrationEvent(event: IntegrationEvent): boolean {
   }
   if (event.type === "expression-hold-command") {
     return holdConfiguredExpression(event.animationName);
+  }
+  if (event.type === "expression-release-command") {
+    releaseHeldExpression("integration");
+    return true;
   }
   handleBridgeEvent(event);
   return true;

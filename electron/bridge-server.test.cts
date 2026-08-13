@@ -60,7 +60,7 @@ function requestServer(
   });
 }
 
-test("normalizes voice events and configured animation commands", () => {
+test("normalizes voice events, animation commands, and expression commands", () => {
   const state = {
     activity: "speaking",
     microphoneMuted: false,
@@ -76,8 +76,21 @@ test("normalizes voice events and configured animation commands", () => {
     normalizeEvent({ type: "expression-hold", animation_name: "wave-hello" }),
     { type: "expression-hold-command", animationName: "wave-hello" },
   );
+  assert.equal(
+    normalizeEvent({ type: "expression-hold", animation_name: "Wave Hello" }),
+    null,
+  );
+  assert.equal(
+    normalizeEvent({ type: "expression-hold", animation_name: "unknown/name" }),
+    null,
+  );
+  assert.equal(normalizeEvent({ type: "expression-hold" }), null);
+  assert.equal(
+    normalizeEvent({ type: "expression-hold", expression_name: "happy" }),
+    null,
+  );
   assert.deepEqual(normalizeEvent({ type: "expression-release" }), {
-    type: "expression-release",
+    type: "expression-release-command",
   });
   assert.deepEqual(
     normalizeEvent({ type: "animation", animation_name: "wave-hello" }),
@@ -288,6 +301,51 @@ test("bridge delegates configured animation names to the active library", async 
   assert.deepEqual(events, [
     { type: "animation-command", animationName: "installed-motion" },
     { type: "animation-command", animationName: "uninstalled-motion" },
+  ]);
+});
+
+test("bridge rejects expression holds the active library cannot resolve", async (context) => {
+  const events: IntegrationEvent[] = [];
+  const bridge = createBridgeServer({
+    port: 0,
+    onEvent: (event) => {
+      events.push(event);
+      return (
+        event.type !== 'expression-hold-command' ||
+        event.animationName === "installed-motion"
+      );
+    },
+  });
+  const address = await bridge.listen();
+  context.after(() => bridge.close());
+
+  const postEvent = (body: unknown) =>
+    requestServer(address, {
+      path: "/events",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  const accepted = await postEvent({
+    type: "expression-hold",
+    animation_name: "installed-motion",
+  });
+  const rejected = await postEvent({
+    type: "expression-hold",
+    animation_name: "uninstalled-motion",
+  });
+  // Release is unconditional: an integration that has lost track of its own
+  // state should be able to send it without first proving something is held.
+  const released = await postEvent({ type: "expression-release" });
+
+  assert.equal(accepted.status, 202);
+  assert.equal(rejected.status, 422);
+  assert.equal(released.status, 202);
+  assert.deepEqual(events, [
+    { type: "expression-hold-command", animationName: "installed-motion" },
+    { type: "expression-hold-command", animationName: "uninstalled-motion" },
+    { type: "expression-release-command" },
   ]);
 });
 

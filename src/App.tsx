@@ -152,6 +152,13 @@ export function App() {
     ],
     [settings.animations],
   );
+  // A held expression outranks the expression a newly started action carries,
+  // so an action that begins mid-hold plays its body animation without
+  // touching the face. Name and weight are read off the same object so the two
+  // can never be paired from different expressions.
+  const expressionName = heldExpression?.name ?? bodyOverride?.expressionName;
+  const expressionWeight =
+    heldExpression?.weight ?? bodyOverride?.expressionWeight;
   const overrideRequestId = bodyOverride?.requestId ?? null;
   const handleAnimationComplete = useCallback(() => {
     if (overrideRequestId == null) return;
@@ -168,8 +175,8 @@ export function App() {
         animationUrls={animationUrls}
         fallbackAnimationUrls={idleAnimationUrls}
         preloadAnimationUrls={preloadAnimationUrls}
-        expressionName={heldExpression?.name ?? bodyOverride?.expressionName}
-        expressionWeight={heldExpression?.weight ?? bodyOverride?.expressionWeight}
+        expressionName={expressionName}
+        expressionWeight={expressionWeight}
         audioLevel={audioLevel}
         bodySpeaking={bodySpeaking}
         characterSize={settings.character_size}

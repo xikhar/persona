@@ -81,12 +81,23 @@ export interface AnimationPlaybackEvent {
   requestId: number;
 }
 
+/**
+ * Renderer-facing form of a hold. Integrations post `{ type:
+ * 'expression-hold', animation_name }` to the bridge; the main process
+ * resolves that action's configured expression and forwards this event, so the
+ * renderer never has to look at animation metadata.
+ */
 export interface ExpressionHoldEvent {
   type: 'expression-hold';
   expressionName: PersonaExpressionName;
   expressionWeight?: number;
 }
 
+/**
+ * Emitted when an integration posts `{ type: 'expression-release' }`, and also
+ * when the main process drops a hold on its own (hold timeout, or the model
+ * being unconfigured).
+ */
 export interface ExpressionReleaseEvent {
   type: 'expression-release';
 }
