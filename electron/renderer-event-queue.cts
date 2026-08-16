@@ -1,5 +1,10 @@
 import type { AvatarRendererEvent } from './types.cjs';
 
+type ExpressionHoldRendererEvent = Extract<
+  AvatarRendererEvent,
+  { type: 'expression-hold' }
+>;
+
 /**
  * The slot an event occupies while it waits for a renderer.
  *
@@ -43,4 +48,29 @@ export class PendingRendererEvents {
     this.#events.clear();
     return events;
   }
+}
+
+/**
+ * Returns the state a newly loaded renderer must receive.
+ *
+ * A delivered hold is intentionally removed from the pending queue, but it is
+ * still authoritative main-process state. A renderer reload starts from a
+ * neutral face, so replay the active hold unless the queue already contains a
+ * newer expression hold/release intent.
+ */
+export function drainRendererEventsForLoad(
+  pending: PendingRendererEvents,
+  heldExpression: ExpressionHoldRendererEvent | null,
+): AvatarRendererEvent[] {
+  const events = pending.drain();
+  const expressionDelivered = events.some(
+    (event) =>
+      event.type === 'expression-hold' || event.type === 'expression-release',
+  );
+
+  if (!expressionDelivered && heldExpression != null) {
+    events.push(heldExpression);
+  }
+
+  return events;
 }

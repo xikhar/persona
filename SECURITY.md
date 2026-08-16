@@ -18,7 +18,11 @@ source identity is persisted only in Persona's local settings.
 
 The integration server binds only to `127.0.0.1`, rejects non-loopback `Host`
 headers, restricts browser origins, and limits request bodies. Its event API
-accepts only normalized state, level, and animation events. Its MCP API exposes
+accepts only normalized state, level, animation, and expression hold/release
+events. An expression hold names an action from the same validated local
+catalog and resolves to that action's configured expression, so it carries no
+free-form expression value, and a held expression is released on a timeout and
+on configuration changes rather than persisting indefinitely. Its MCP API exposes
 only bounded animation, window, and status operations. Animation names are
 validated against the current local catalog before playback. The server cannot
 execute commands or access arbitrary files.

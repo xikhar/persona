@@ -190,6 +190,49 @@ Configured animation action:
 
 The name must match a playable action in Persona's merged library.
 
+Expression hold and release:
+
+```json
+{
+  "type": "expression-hold",
+  "animation_name": "example-animation"
+}
+```
+
+```json
+{
+  "type": "expression-release"
+}
+```
+
+An action's configured expression normally follows its animation and is
+restored when the animation finishes. `expression-hold` resolves an action
+through the same library and keeps that action's configured expression active
+independently of it, for integrations whose speech outlasts the motion — a
+reply that goes on talking long after a two-second embarrassed clip has ended
+can hold the expression until playback finishes and release it then. The
+animation itself is neither played nor extended; only its expression is held.
+Short-lived reactions need neither event and can keep using the default
+lifecycle.
+
+A held expression takes precedence over the expression carried by an action
+that starts later, so an action playing during a hold moves the body without
+changing the face. A second hold replaces the first rather than stacking, and
+`expression-release` is accepted whether or not anything is currently held.
+
+Persona answers `202` once an event is accepted and `422` when it is not. A
+hold is rejected when no model is configured, when the name does not resolve to
+an installed action, or when that action has no configured expression. Unlike
+an animation command, a hold does not require the action to have a playable
+clip. A rejected hold changes nothing, and that action keeps its ordinary
+animation-bound expression lifecycle.
+
+Persona ends a hold on its own if the integration does not: after five minutes,
+when the selected model changes, when the held action is removed, or when its
+configured expression or weight changes. These are failsafes for an integration
+that exits or loses its connection rather than a substitute for sending
+`expression-release`.
+
 Send events:
 
 ```bash
