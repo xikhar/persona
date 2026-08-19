@@ -254,8 +254,9 @@ function AvatarModel({
           .addScaledVector(CAMERA_UP, dragInertia.y);
 
         // Into the frame the torso rotates in. Its matrix is a frame stale,
-        // which at these angles is not visible.
-        const parent = torso.bones[0].node.parent;
+        // which at these angles is not visible. readTorso never returns an
+        // empty bone list, so the optional chain here is a formality.
+        const parent = torso.bones[0]?.node.parent;
         if (parent) {
           LAG.applyQuaternion(
             parent.getWorldQuaternion(PARENT_ROTATION).invert(),

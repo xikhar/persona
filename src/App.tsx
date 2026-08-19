@@ -155,10 +155,13 @@ export function App() {
   // A held expression outranks the expression a newly started action carries,
   // so an action that begins mid-hold plays its body animation without
   // touching the face. Name and weight are read off the same object so the two
-  // can never be paired from different expressions.
-  const expressionName = heldExpression?.name ?? bodyOverride?.expressionName;
+  // can never be paired from different expressions. Both settle on the
+  // "nothing configured" value rather than staying absent, because a prop that
+  // is explicitly undefined is not the same as one that was never passed.
+  const expressionName =
+    heldExpression?.name ?? bodyOverride?.expressionName ?? null;
   const expressionWeight =
-    heldExpression?.weight ?? bodyOverride?.expressionWeight;
+    heldExpression?.weight ?? bodyOverride?.expressionWeight ?? 1;
   const overrideRequestId = bodyOverride?.requestId ?? null;
   const handleAnimationComplete = useCallback(() => {
     if (overrideRequestId == null) return;
@@ -181,7 +184,7 @@ export function App() {
         bodySpeaking={bodySpeaking}
         characterSize={settings.character_size}
         dragInertia={dragInertia}
-        lighting={settings.model_lighting[defaultModel.id]}
+        lighting={settings.model_lighting[defaultModel.id] ?? null}
         modelUrl={defaultModel.asset_url}
         onAnimationComplete={handleAnimationComplete}
         playback={bodyOverride ? 'once' : 'loop'}

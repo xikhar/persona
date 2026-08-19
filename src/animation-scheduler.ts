@@ -33,7 +33,10 @@ export interface AnimationScheduleRequest {
   animationRequest: number;
   animationUrls: readonly string[];
   fallbackAnimationUrls?: readonly string[];
-  onComplete?: () => void;
+  // Explicitly `| undefined`: the request key does not include the callback, so
+  // a repeat of the same request carries the current one, and a repeat with no
+  // callback has to clear the previous one rather than leave it to fire.
+  onComplete?: (() => void) | undefined;
   playback: AnimationPlayback;
   type: PlayableAnimationType;
 }
@@ -261,7 +264,7 @@ export class AnimationScheduler {
     this.mixer = mixer;
     this.loadClip = options.loadClip;
     this.random = options.random ?? Math.random;
-    this.debug = options.debug;
+    if (options.debug) this.debug = options.debug;
     this.timing = options.timing;
     this.speakingActive = options.speakingActive ?? false;
     this.rawSpeakingActive = this.speakingActive;

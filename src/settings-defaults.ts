@@ -81,8 +81,51 @@ export const DEFAULT_LIGHTING: PersonaLightingSettings = {
   ambient_intensity: Math.PI,
 };
 
+export type LightingNumberField =
+  | 'exposure'
+  | 'environment_intensity'
+  | 'key_light_intensity'
+  | 'ambient_intensity';
+
+/**
+ * Mirrors MODEL_LIGHTING_RANGES in electron/settings-store.cts. The store is
+ * the authority and clamps again on save; these bound the controls so a value
+ * the store would reject never reaches it in the first place.
+ */
+export const LIGHTING_NUMBER_RANGES: Record<
+  LightingNumberField,
+  readonly [number, number]
+> = {
+  exposure: [0.1, 3],
+  environment_intensity: [0, 2],
+  key_light_intensity: [0, 4],
+  ambient_intensity: [0, 4],
+};
+
+/** The value if the field can take it, or null while the input is unusable. */
+export function lightingNumberInRange(
+  field: LightingNumberField,
+  value: number,
+): number | null {
+  const [minimum, maximum] = LIGHTING_NUMBER_RANGES[field];
+  return Number.isFinite(value) && value >= minimum && value <= maximum
+    ? value
+    : null;
+}
+
+/**
+ * Every field independently absent *or* explicitly undefined. Stored profiles
+ * are parsed JSON that may carry either, and this function's whole job is to
+ * fill both in.
+ */
+export type StoredLightingSettings = {
+  [Field in keyof PersonaLightingSettings]?:
+    | PersonaLightingSettings[Field]
+    | undefined;
+};
+
 export function resolveLightingSettings(
-  lighting?: Partial<PersonaLightingSettings> | null,
+  lighting?: StoredLightingSettings | null,
 ): PersonaLightingSettings {
   return {
     tone_mapping:

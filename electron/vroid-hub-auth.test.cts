@@ -144,6 +144,54 @@ test("rejects exchanging a code with no pending flow or a mismatched state", asy
   assert.equal(auth.isConnected(), false);
 });
 
+test("a callback with the wrong state leaves the real sign-in usable", async (context) => {
+  // The redirect URI is a loopback GET, so anything local can call it. A
+  // callback that cannot prove it belongs to the pending flow must not be able
+  // to cancel that flow.
+  const auth = createAuth(context, {
+    fetchImpl: async () =>
+      jsonResponse(200, {
+        access_token: "access-1",
+        refresh_token: "refresh-1",
+        token_type: "Bearer",
+        expires_in: 3600,
+      }),
+  });
+  const state = new URL(auth.buildAuthorizeUrl()).searchParams.get("state");
+
+  await assert.rejects(() => auth.exchangeCode("forged", "wrong-state"), /state/i);
+  await assert.rejects(() => auth.exchangeCode("forged", null), /state/i);
+  await assert.rejects(() => auth.exchangeCode("forged", ""), /state/i);
+
+  await auth.exchangeCode("auth-code", state);
+  assert.equal(auth.isConnected(), true);
+});
+
+test("a matching callback consumes the pending flow exactly once", async (context) => {
+  const auth = createAuth(context, {
+    fetchImpl: async () =>
+      jsonResponse(200, {
+        access_token: "access-1",
+        refresh_token: "refresh-1",
+        token_type: "Bearer",
+        expires_in: 3600,
+      }),
+  });
+  const state = new URL(auth.buildAuthorizeUrl()).searchParams.get("state");
+
+  await auth.exchangeCode("auth-code", state);
+  await assert.rejects(() => auth.exchangeCode("auth-code", state), /no pending/i);
+});
+
+test("a matching callback without a code still spends the flow", async (context) => {
+  const auth = createAuth(context, { fetchImpl: async () => jsonResponse(200, {}) });
+  const state = new URL(auth.buildAuthorizeUrl()).searchParams.get("state");
+
+  await assert.rejects(() => auth.exchangeCode(null, state), /authorization code/i);
+  await assert.rejects(() => auth.exchangeCode("auth-code", state), /no pending/i);
+  assert.equal(auth.isConnected(), false);
+});
+
 test("surfaces a failed token exchange without persisting anything", async (context) => {
   const { authFilePath } = fixture(context);
   const auth = createAuth(context, {

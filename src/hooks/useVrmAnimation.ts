@@ -91,7 +91,7 @@ export function useVrmAnimation(
     const nextScheduler = new AnimationScheduler(
       new THREE.AnimationMixer(vrm.scene),
       {
-        debug: animationDebugEnabled ? logAnimationEvent : undefined,
+        ...(animationDebugEnabled ? { debug: logAnimationEvent } : {}),
         loadClip,
         timing: {
           bodyTransitionMs: DEFAULT_BODY_TRANSITION_MS,

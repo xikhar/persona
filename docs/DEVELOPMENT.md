@@ -16,7 +16,15 @@ Persona has four intentionally narrow layers:
 No renderer code has filesystem, process, or raw-audio access.
 
 All renderer, Electron, Node tooling, and JavaScript-side test source is
-TypeScript. Electron and Node entry points use `.cts` so their generated
+TypeScript, and every part of it compiles under the same strict option set —
+`strict` plus `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`,
+`noImplicitOverride`, `noFallthroughCasesInSwitch`, `noImplicitReturns`, and
+the unused-binding checks. `tsconfig.app.json` and `tsconfig.runtime.json`
+deliberately agree on these: an indexed read is `T | undefined` on both sides
+of the preload, and an optional property that is genuinely assigned
+`undefined` has to say so in its type rather than being widened by default.
+
+Electron and Node entry points use `.cts` so their generated
 CommonJS retains Electron's packaged runtime contract. `npm run build:runtime`
 removes stale generated output, then compiles production sources to ignored
 `.cjs` files beside them; edit the TypeScript sources, never generated files.
@@ -80,6 +88,24 @@ Settings and does not create the avatar window or start the audio listener until
 the merged snapshot has a valid `default_model_id`. Importing the first user
 model selects it automatically. Empty Idle or Speaking actions use an empty
 animation URL list, which leaves the VRM in its normal pose.
+
+### Settings window
+
+`src/components/SettingsPage.tsx` owns the window's state, the operations that
+write it back through the preload, and the shell: sidebar, header, notice bar,
+confirmation dialog, and live preview. It renders nothing section-specific
+itself. Each of the six sections is a component under
+`src/components/settings/` with an explicit props interface, so what a section
+depends on is written down rather than inherited from an enclosing scope.
+
+Logic that is not presentation lives outside the components and is tested
+directly: `settings-sections.ts` (nav descriptors and headings),
+`settings-errors.ts` (unwrapping Electron's IPC rejection prefix),
+`range-slider.ts` (handle constraints and track fills), `vroid-characters.ts`
+(owned/hearted grouping), `vroid-portraits.ts` (the portrait cache and its
+in-flight deduplication), `mcp-tool-catalog.ts`, and `voice-pattern-risk.ts`.
+Prefer adding to one of those over adding a helper inside a component: a
+section component should read as markup plus its props.
 
 ### Animation scheduler
 
@@ -211,7 +237,13 @@ shell execution.
 
 The loopback server creates a stateful Streamable HTTP transport when a client
 initializes an MCP session, then routes subsequent `POST`, `GET`, and `DELETE`
-requests by session ID. Active sessions receive tool-list change notifications
+requests by session ID. Sessions are only released when a client sends `DELETE`
+or drops its stream, and the endpoint is reachable by anything on the machine,
+so the handler holds its own ceiling: a new session first reaps anything idle
+past `MCP_SESSION_IDLE_TIMEOUT_MS`, then evicts least-recently-used sessions
+until it is back under `MAX_MCP_SESSIONS`. Evicting the oldest rather than
+refusing the newest keeps a live client working while abandoned sessions are
+the ones reaped. Active sessions receive tool-list change notifications
 when the playable action catalog changes. New sessions always discover the
 latest catalog, and `play_animation` checks the live store again when invoked.
 MCP shares the existing local integration port rather than opening another
@@ -291,20 +323,25 @@ electron-builder's bundled packaging tool.
 ## Test coverage
 
 The Node suite covers settings persistence and imported-media boundaries, MCP
-discovery and tool calls, the bridge boundary, URL protocol, Hyprland rules,
-PipeWire selection and PCM normalization, process discovery on macOS and
-Windows, native NDJSON parsing, shared pause smoothing, listener lifecycle,
-asset safety, release checksums, and VRoid Hub OAuth — including which refresh
-failures are allowed to discard the saved session and which must preserve it,
-and the forced refresh that tells a revoked authorization apart from an outage.
+discovery, tool calls and session lifetime, the bridge boundary, URL protocol,
+Hyprland rules, PipeWire selection and PCM normalization, process discovery on
+macOS and Windows, native NDJSON parsing, shared pause smoothing, listener
+lifecycle, asset safety, release checksums, and VRoid Hub OAuth — including
+which refresh failures are allowed to discard the saved session and which must
+preserve it, the forced refresh that tells a revoked authorization apart from an
+outage, and which callbacks are allowed to consume a pending sign-in.
 
 Vitest covers animation priority and configured animation selection, speech
 signal gating, motion compatibility and variety, transition timing, async
 request replacement, pause debounce, Idle interim handling, one-shot actions,
-scheduler cleanup, and drag inertia including camera-jump rejection, the lean
-cap, the direction each channel lags in, and return-to-rest. GitHub Actions
-then compiles and self-tests the native helper on its real operating system
-and builds the renderer on all three platforms.
+scheduler cleanup, drag inertia including camera-jump rejection, the lean cap,
+the direction each channel lags in and return-to-rest, plus the Settings
+window's own logic: IPC error unwrapping, slider handle constraints, lighting
+field ranges, section descriptors, VRoid character grouping, the MCP tool
+table, and voice-pattern risk detection. Its `include` covers `.tsx` as well as
+`.ts`, so logic that lives beside a component is testable where it is.
+GitHub Actions then compiles and self-tests the native helper on its real
+operating system and builds the renderer on all three platforms.
 
 Headless CI cannot create a real Codex voice call or approve operating-system
 audio permissions. Before a release, manually run the checklist in

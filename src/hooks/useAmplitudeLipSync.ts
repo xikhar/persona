@@ -17,11 +17,11 @@ export function useAmplitudeLipSync(vrm: VRM | null) {
       phase.current += delta * (8 + smoothed.current * 9);
       const active = Math.floor(phase.current) % VISEMES.length;
 
-      for (let index = 0; index < VISEMES.length; index += 1) {
+      for (const [index, viseme] of VISEMES.entries()) {
         const shape = Math.max(0, 1 - Math.abs(index - active) * 0.72);
         const flutter = 0.74 + Math.sin(phase.current * 5.7 + index) * 0.18;
         vrm.expressionManager.setValue(
-          VISEMES[index],
+          viseme,
           Math.min(0.62, smoothed.current * shape * flutter),
         );
       }

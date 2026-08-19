@@ -7,6 +7,7 @@ import {
   selectMotionTransition,
   selectVariedMotionTransition,
 } from './animation-motion';
+import { assertDefined, definedAt } from './test-support';
 
 function positionClip(
   name: string,
@@ -41,9 +42,9 @@ describe('animation motion compatibility', () => {
       'continuing',
       'reversing',
     ]);
-    expect(rankings[0].poseDistance).toBeCloseTo(0, 8);
-    expect(rankings[0].velocityDistance).toBeCloseTo(0, 8);
-    expect(rankings[1].velocityDistance).toBeGreaterThan(1);
+    expect(definedAt(rankings, 0).poseDistance).toBeCloseTo(0, 8);
+    expect(definedAt(rankings, 0).velocityDistance).toBeCloseTo(0, 8);
+    expect(definedAt(rankings, 1).velocityDistance).toBeGreaterThan(1);
   });
 
   it('treats opposite quaternion signs as the same pose', () => {
@@ -78,6 +79,7 @@ describe('animation motion compatibility', () => {
       { loopSampleSeconds: 0.25, loopTarget: true },
     );
 
+    assertDefined(ranking, 'loop ranking');
     expect(ranking.startTime).toBeCloseTo(1, 8);
     expect(ranking.poseDistance).toBeCloseTo(0, 8);
   });
@@ -98,6 +100,8 @@ describe('animation motion compatibility', () => {
       { entrySampleSeconds: 0.3 },
     );
 
+    assertDefined(fromStart, 'unphased ranking');
+    assertDefined(phaseMatched, 'phase-matched ranking');
     expect(phaseMatched.startTime).toBeGreaterThan(0);
     expect(phaseMatched.poseDistance).toBeLessThan(fromStart.poseDistance);
   });
@@ -197,7 +201,7 @@ describe('animation motion compatibility', () => {
     const source = positionClip('source', [0, 1], [0, 1]);
     const valid = positionClip('valid', [0, 1], [1, 2]);
     const malformed = positionClip('malformed', [0, 1], [1, 2]);
-    Object.assign(malformed.tracks[0], {
+    Object.assign(definedAt(malformed.tracks, 0, 'track'), {
       createInterpolant: () => {
         throw new Error('broken interpolant');
       },

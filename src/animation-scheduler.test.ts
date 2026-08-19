@@ -10,6 +10,7 @@ import {
   type AnimationSchedulerDebugEvent,
   type AnimationSchedulerTiming,
 } from './animation-scheduler';
+import { definedAt } from './test-support';
 
 const TIMING: AnimationSchedulerTiming = {
   bodyTransitionMs: 1000,
@@ -127,8 +128,9 @@ describe('animation scheduler timing', () => {
     expect(samples[0]).toBe(0);
     expect(samples.at(-1)).toBe(1);
     for (let index = 1; index < samples.length; index += 1) {
-      expect(samples[index]).toBeGreaterThanOrEqual(samples[index - 1]);
-      expect(samples[index] + (1 - samples[index])).toBeCloseTo(1, 12);
+      const sample = definedAt(samples, index, 'sample');
+      expect(sample).toBeGreaterThanOrEqual(definedAt(samples, index - 1, 'sample'));
+      expect(sample + (1 - sample)).toBeCloseTo(1, 12);
     }
   });
 });
@@ -390,7 +392,11 @@ describe('animation scheduler transitions', () => {
       type: 'CUSTOM',
     });
     scheduler.update(0.4);
-    const first = scheduler.getDebugSnapshot().weights[0];
+    const first = definedAt(
+      scheduler.getDebugSnapshot().weights,
+      0,
+      'contributing action',
+    );
 
     await scheduler.request({
       animationRequest: 2,

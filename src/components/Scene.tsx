@@ -32,7 +32,9 @@ interface SceneProps {
   enablePan?: boolean;
   framingMargin?: number;
   groundShadow?: boolean;
-  lighting?: PersonaLightingSettings;
+  // `null` rather than merely absent: a model with no saved lighting profile is
+  // a normal state that a caller reads out of a record and forwards as-is.
+  lighting?: PersonaLightingSettings | null;
   modelUrl: string;
   onAnimationComplete: () => void;
   playback: 'loop' | 'once';

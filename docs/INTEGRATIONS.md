@@ -112,6 +112,15 @@ Persona still calculates only an in-memory output level. It does not capture the
 microphone, run language models, transcribe speech, or send audio over the
 network.
 
+Keep an advanced pattern simple. Persona runs it against process identity on
+its main thread every time it looks for the voice source, so a pattern that
+backtracks catastrophically — nested quantifiers over overlapping character
+classes, such as `(a+)+b` — will freeze the application rather than fail to
+match. Prefer a plain substring or alternation like `my-voice-app|my-tts`.
+Persona rejects a pattern that does not compile and caps its length, but it
+cannot bound how long a valid pattern takes to run. The same caution applies to
+`PERSONA_TARGET_PROCESS_PATTERN`.
+
 ## Local models and voice pipelines
 
 Persona is a visual companion for voice experiences. Local models such as Qwen

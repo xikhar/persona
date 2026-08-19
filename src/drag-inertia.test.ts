@@ -15,6 +15,7 @@ import {
   torsoLeanAngle,
   worldPerPixel,
 } from './drag-inertia';
+import { assertDefined, definedAt } from './test-support';
 
 const WORLD_PER_PIXEL = 0.004;
 
@@ -118,6 +119,7 @@ describe('leanWeightsFor', () => {
 
   it('puts most of the lean on the highest joint', () => {
     const [top, ...rest] = leanWeightsFor(ALL);
+    assertDefined(top, 'highest weighted joint');
     expect(top[0]).toBe('upperChest');
     // Rigid props hang off the chest, below this joint, and get thrown when
     // the lean is shared out evenly.
@@ -128,7 +130,9 @@ describe('leanWeightsFor', () => {
   it('descends down the chain', () => {
     const weights = leanWeightsFor(ALL).map(([, w]) => w);
     for (let i = 1; i < weights.length; i += 1) {
-      expect(weights[i]).toBeLessThanOrEqual(weights[i - 1]);
+      expect(definedAt(weights, i, 'weight')).toBeLessThanOrEqual(
+        definedAt(weights, i - 1, 'weight'),
+      );
     }
   });
 

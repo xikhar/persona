@@ -185,17 +185,28 @@ export function createVroidHubAuth({
     return url.toString();
   }
 
+  // The redirect URI is a plain loopback GET that anything on this machine can
+  // reach, so a callback only consumes the pending flow once its state proves
+  // it belongs to that flow. Clearing first would let any local page cancel a
+  // sign-in in progress just by hitting the callback path.
   async function exchangeCode(code: unknown, state: unknown): Promise<void> {
     const flow = pendingFlow;
-    pendingFlow = null;
-    if (!flow || flow.expiresAt < Date.now()) {
+    if (!flow) {
       throw new Error('No pending VRoid Hub sign-in, or it expired. Start again.');
     }
-    if (typeof code !== 'string' || code === '') {
-      throw new Error('VRoid Hub did not return an authorization code.');
+    if (flow.expiresAt < Date.now()) {
+      pendingFlow = null;
+      throw new Error('No pending VRoid Hub sign-in, or it expired. Start again.');
     }
     if (typeof state !== 'string' || state !== flow.state) {
       throw new Error('VRoid Hub sign-in state did not match. Start again.');
+    }
+    // The state matched, so this callback is the answer to the flow and the
+    // flow is spent either way: the code is single-use, and a retry has to
+    // start a fresh authorization rather than replay this one.
+    pendingFlow = null;
+    if (typeof code !== 'string' || code === '') {
+      throw new Error('VRoid Hub did not return an authorization code.');
     }
 
     const response = await fetchImpl(TOKEN_URL, {

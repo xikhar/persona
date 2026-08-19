@@ -128,7 +128,7 @@ function quaternionAngle(
   const left = normalizedQuaternion(leftValues);
   const right = normalizedQuaternion(rightValues);
   const dot = Math.abs(
-    left.reduce((total, value, index) => total + value * right[index], 0),
+    left.reduce((total, value, index) => total + value * (right[index] ?? 0), 0),
   );
   return 2 * Math.acos(clamp(dot, -1, 1));
 }
@@ -400,6 +400,9 @@ export function rankBlendedMotionTransitions(
         })
         .sort((left, right) => left.score - right.score)[0];
     })
+    // A candidate with no usable start time ranks nothing; drop it rather than
+    // letting a hole travel with the rankings.
+    .filter((ranking) => ranking != null)
     .sort((left, right) => left.score - right.score);
 }
 
@@ -408,10 +411,13 @@ export function selectMotionTransition(
   recentUrls: readonly string[],
   random: () => number = Math.random,
 ): MotionTransitionRanking | null {
-  const finiteRankings = rankings.filter(({ score }) => Number.isFinite(score));
-  if (finiteRankings.length === 0) return null;
+  const finiteRankings = rankings.filter(({ score }) =>
+    Number.isFinite(score),
+  );
+  const [bestRanking] = finiteRankings;
+  if (!bestRanking) return null;
   const recency = recentUrls.slice(-6);
-  const rawBestScore = finiteRankings[0].score;
+  const rawBestScore = bestRanking.score;
   const compatibilityTolerance = Math.max(0.1, rawBestScore * 0.35);
   const candidates = finiteRankings
     .filter(
@@ -427,7 +433,9 @@ export function selectMotionTransition(
       };
     })
     .sort((left, right) => left.effectiveScore - right.effectiveScore);
-  const bestScore = candidates[0].effectiveScore;
+  // candidates always holds at least the best ranking: it passed the tolerance
+  // filter against its own score.
+  const bestScore = candidates[0]?.effectiveScore ?? 0;
   const shortlist = candidates.slice(0, 4);
   const weights = shortlist.map(({ effectiveScore }) =>
     Number.isFinite(effectiveScore)
@@ -437,9 +445,9 @@ export function selectMotionTransition(
   const totalWeight = weights.reduce((total, weight) => total + weight, 0);
   if (totalWeight <= Number.EPSILON) return shortlist[0]?.ranking ?? null;
   let choice = clamp(random(), 0, 1) * totalWeight;
-  for (let index = 0; index < shortlist.length; index += 1) {
-    choice -= weights[index];
-    if (choice <= 0) return shortlist[index].ranking;
+  for (const [index, entry] of shortlist.entries()) {
+    choice -= weights[index] ?? 0;
+    if (choice <= 0) return entry.ranking;
   }
   return shortlist.at(-1)?.ranking ?? null;
 }

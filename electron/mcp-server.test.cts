@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { type TestContext } from 'node:test';
 import type { AddressInfo } from 'node:net';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import {
   StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {
+  LATEST_PROTOCOL_VERSION,
   ToolListChangedNotificationSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { createBridgeServer } from './bridge-server.cjs';
@@ -13,6 +14,7 @@ import {
   SERVER_INSTRUCTIONS,
   WINDOW_ACTIONS,
   createPersonaMcpHandler,
+  type PersonaMcpHandlerOptions,
   type WindowAction,
 } from './mcp-server.cjs';
 import { isRecord } from './types.cjs';
@@ -369,4 +371,141 @@ test("Persona MCP reports an inactive animation command without a model", async 
 
   assert.equal(result.isError, true);
   assert.match(resultText(result), /model and at least one clip/);
+});
+
+interface RawMcpResponse {
+  body: string;
+  sessionId: string | null;
+  status: number;
+}
+
+async function postMcp(
+  port: number,
+  payload: unknown,
+  sessionId: string | null = null,
+): Promise<RawMcpResponse> {
+  const response = await fetch(`http://127.0.0.1:${port}/mcp`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      ...(sessionId ? { "mcp-session-id": sessionId } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+  return {
+    body: await response.text(),
+    sessionId: response.headers.get("mcp-session-id"),
+    status: response.status,
+  };
+}
+
+function initializeRequest(clientName: string): unknown {
+  return {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: {
+      protocolVersion: LATEST_PROTOCOL_VERSION,
+      capabilities: {},
+      clientInfo: { name: clientName, version: "1.0.0" },
+    },
+  };
+}
+
+function toolsListRequest(): unknown {
+  return { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} };
+}
+
+function sessionBridge(
+  context: TestContext,
+  options: PersonaMcpHandlerOptions,
+): Promise<number> {
+  const bridge = createBridgeServer({
+    port: 0,
+    onEvent: () => {},
+    mcpHandler: createPersonaMcpHandler(
+      {
+        onAnimation: () => true,
+        onWindowAction: () => true,
+        getStatus: () => ({}),
+        getAnimations: () => [],
+      },
+      options,
+    ),
+  });
+  context.after(() => bridge.close());
+  return bridge.listen().then(bridgePort);
+}
+
+async function openSession(port: number, name: string): Promise<string> {
+  const opened = await postMcp(port, initializeRequest(name));
+  assert.equal(opened.status, 200, opened.body);
+  assert.ok(opened.sessionId, "initialize did not return a session id");
+  return opened.sessionId;
+}
+
+test("Persona MCP evicts the least recently used session at its ceiling", async (context) => {
+  // A client that crashes or reconnects without DELETE leaves its session
+  // behind. The endpoint is unauthenticated loopback, so the ceiling is what
+  // stops those accumulating for the lifetime of the app.
+  const port = await sessionBridge(context, { maxSessions: 3 });
+
+  const first = await openSession(port, "first");
+  const second = await openSession(port, "second");
+  const third = await openSession(port, "third");
+
+  // Touching the first makes the second the least recently used.
+  assert.equal((await postMcp(port, toolsListRequest(), first)).status, 200);
+
+  const fourth = await openSession(port, "fourth");
+
+  assert.equal((await postMcp(port, toolsListRequest(), second)).status, 404);
+  for (const live of [first, third, fourth]) {
+    assert.equal(
+      (await postMcp(port, toolsListRequest(), live)).status,
+      200,
+      "a live session must survive the eviction",
+    );
+  }
+});
+
+test("Persona MCP reaps sessions left idle past the timeout", async (context) => {
+  let clock = 1_000;
+  const port = await sessionBridge(context, {
+    maxSessions: 8,
+    now: () => clock,
+    sessionIdleTimeoutMs: 60_000,
+  });
+
+  const abandoned = await openSession(port, "abandoned");
+  clock += 30_000;
+  const recent = await openSession(port, "recent");
+
+  // Far enough that the first session is idle but the second is not.
+  clock += 45_000;
+  const opener = await openSession(port, "opener");
+
+  assert.equal((await postMcp(port, toolsListRequest(), abandoned)).status, 404);
+  assert.equal((await postMcp(port, toolsListRequest(), recent)).status, 200);
+  assert.equal((await postMcp(port, toolsListRequest(), opener)).status, 200);
+});
+
+test("Persona MCP keeps a session alive while its client keeps using it", async (context) => {
+  let clock = 1_000;
+  const port = await sessionBridge(context, {
+    maxSessions: 8,
+    now: () => clock,
+    sessionIdleTimeoutMs: 60_000,
+  });
+  const session = await openSession(port, "busy");
+
+  for (let tick = 0; tick < 5; tick += 1) {
+    clock += 45_000;
+    assert.equal((await postMcp(port, toolsListRequest(), session)).status, 200);
+  }
+
+  clock += 45_000;
+  await openSession(port, "other");
+  assert.equal((await postMcp(port, toolsListRequest(), session)).status, 200);
 });

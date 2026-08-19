@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_LIGHTING,
+  lightingNumberInRange,
   loadPackagedSettingsFallback,
   resolveLightingSettings,
 } from './settings-defaults';
@@ -65,5 +66,42 @@ describe('packaged settings fallback', () => {
       expression_name: 'happy',
       expression_weight: 0.75,
     });
+  });
+});
+
+describe('lightingNumberInRange', () => {
+  it('accepts a value the store will also accept', () => {
+    expect(lightingNumberInRange('exposure', 1.5)).toBe(1.5);
+    expect(lightingNumberInRange('environment_intensity', 0)).toBe(0);
+    expect(lightingNumberInRange('key_light_intensity', 4)).toBe(4);
+  });
+
+  it('rejects a value outside the field’s own range', () => {
+    // exposure starts at 0.1, not 0: the ranges are per field, and a value
+    // valid for one control is not automatically valid for another.
+    expect(lightingNumberInRange('exposure', 0)).toBeNull();
+    expect(lightingNumberInRange('exposure', 3.5)).toBeNull();
+    expect(lightingNumberInRange('environment_intensity', 2.5)).toBeNull();
+    expect(lightingNumberInRange('ambient_intensity', -1)).toBeNull();
+  });
+
+  it('rejects what an empty or half-typed number field reports', () => {
+    expect(lightingNumberInRange('exposure', Number.NaN)).toBeNull();
+    expect(
+      lightingNumberInRange('exposure', Number.POSITIVE_INFINITY),
+    ).toBeNull();
+  });
+
+  it('keeps every default inside its own range', () => {
+    for (const field of [
+      'exposure',
+      'environment_intensity',
+      'key_light_intensity',
+      'ambient_intensity',
+    ] as const) {
+      expect(lightingNumberInRange(field, DEFAULT_LIGHTING[field])).toBe(
+        DEFAULT_LIGHTING[field],
+      );
+    }
   });
 });

@@ -32,6 +32,23 @@ running on the same computer can invoke those visual controls. Tools that
 handle sensitive data or broader system access must not be added without a
 separate authorization design.
 
+Packaged builds register the `persona://` URL scheme, which the operating
+system will hand to Persona from any application that opens such a link,
+including a web page the user visits. These links carry the same authority as
+the loopback event API and no more: they show, hide, or toggle the window,
+report a voice state, or play an action whose name is validated against the
+current local catalog. They cannot read settings, reach the filesystem, add or
+change media, or invoke any VRoid Hub operation. Treat the scheme as an
+unauthenticated caller when adding actions to it, and route anything that
+changes configuration through the Settings window instead.
+
+An advanced process pattern is a user-supplied regular expression, and Persona
+matches it against process identity on the main thread during listener
+discovery. A pattern written to backtrack catastrophically will stall the
+application. The Settings field bounds its length and rejects a pattern that
+does not compile, but it cannot bound the pattern's running time; the same
+applies to `PERSONA_TARGET_PROCESS_PATTERN`.
+
 The renderer is sandboxed with context isolation and no Node.js integration. A
 restrictive content security policy is applied, renderer popups are denied, and
 navigation outside the local renderer entry is blocked. The avatar and Settings

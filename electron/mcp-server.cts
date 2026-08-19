@@ -49,8 +49,22 @@ export interface PersonaMcpHandler {
 }
 
 interface McpSession {
+  lastActiveAt: number;
   server: PersonaMcpServer;
   transport: StreamableHTTPServerTransport;
+}
+
+// A session is only released when its client sends DELETE or drops its stream.
+// A client that crashes, is killed, or simply reconnects without closing leaves
+// one behind, and the endpoint is reachable by anything on this machine, so the
+// map needs its own ceiling rather than trusting clients to tidy up.
+export const MAX_MCP_SESSIONS = 8;
+export const MCP_SESSION_IDLE_TIMEOUT_MS = 30 * 60_000;
+
+export interface PersonaMcpHandlerOptions {
+  maxSessions?: number;
+  now?: () => number;
+  sessionIdleTimeoutMs?: number;
 }
 
 function textResult(text: string) {
@@ -209,8 +223,51 @@ export function createPersonaMcpServer({
 
 export function createPersonaMcpHandler(
   controller: PersonaMcpController,
+  {
+    maxSessions = MAX_MCP_SESSIONS,
+    now = Date.now,
+    sessionIdleTimeoutMs = MCP_SESSION_IDLE_TIMEOUT_MS,
+  }: PersonaMcpHandlerOptions = {},
 ): PersonaMcpHandler {
   const sessions = new Map<string, McpSession>();
+
+  function evictSession(evictedSessionId: string): void {
+    const evicted = sessions.get(evictedSessionId);
+    if (!evicted) return;
+    sessions.delete(evictedSessionId);
+    // The transport's onclose also deletes by id, which is a no-op by now.
+    void evicted.server.close().catch(() => {
+      // An already-broken session has nothing left to fail at.
+    });
+  }
+
+  /**
+   * Makes room for one more session: first anything idle past the timeout,
+   * then the least recently used until the map is back under its ceiling.
+   *
+   * Evicting the oldest rather than refusing the newest is deliberate. Both
+   * lose a session when the endpoint is busy, but the realistic cause is a
+   * client that keeps reconnecting without closing, and this keeps the live
+   * client working while the abandoned sessions are the ones reaped.
+   */
+  function reapSessions(): void {
+    const idleCutoff = now() - sessionIdleTimeoutMs;
+    for (const [candidateId, candidate] of sessions) {
+      if (candidate.lastActiveAt <= idleCutoff) evictSession(candidateId);
+    }
+    while (sessions.size >= maxSessions) {
+      let oldestId: string | null = null;
+      let oldestActiveAt = Infinity;
+      for (const [candidateId, candidate] of sessions) {
+        if (candidate.lastActiveAt < oldestActiveAt) {
+          oldestActiveAt = candidate.lastActiveAt;
+          oldestId = candidateId;
+        }
+      }
+      if (oldestId == null) break;
+      evictSession(oldestId);
+    }
+  }
 
   const handler = async (
     request: IncomingMessage,
@@ -219,7 +276,8 @@ export function createPersonaMcpHandler(
   ): Promise<void> => {
     const header = request.headers['mcp-session-id'];
     const sessionId = Array.isArray(header) ? header[0] : header;
-    let session = sessionId ? sessions.get(sessionId) : undefined;
+    const session = sessionId ? sessions.get(sessionId) : undefined;
+    if (session) session.lastActiveAt = now();
     try {
       if (
         !session &&
@@ -227,13 +285,17 @@ export function createPersonaMcpHandler(
         request.method === 'POST' &&
         isInitializeRequest(parsedBody)
       ) {
+        reapSessions();
         const server = createPersonaMcpServer(controller);
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: randomUUID,
           enableJsonResponse: true,
           onsessioninitialized: (initializedSessionId: string) => {
-            session = { server, transport };
-            sessions.set(initializedSessionId, session);
+            sessions.set(initializedSessionId, {
+              lastActiveAt: now(),
+              server,
+              transport,
+            });
           },
         });
         transport.onclose = () => {

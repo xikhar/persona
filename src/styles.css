@@ -1729,6 +1729,17 @@ button {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+.voice-pattern-warning {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--warn);
+  border-radius: var(--r-md);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+}
+
 .voice-pattern-panel .panel-actions {
   display: flex;
   justify-content: flex-start;
