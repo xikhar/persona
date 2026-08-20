@@ -59,7 +59,7 @@ export function DeveloperSection({
               values can make movement look unstable or unnatural.
             </p>
             <button
-              className="primary-button"
+              className="btn btn-primary"
               disabled={busy || !bridge}
               onClick={requestDeveloperSettingsAccess}
               type="button"
@@ -80,7 +80,7 @@ export function DeveloperSection({
                 </p>
               </div>
               <button
-                className="lighting-reset-button"
+                className="btn btn-secondary"
                 disabled={
                   busy || !bridge || !developerSettingsModified
                 }

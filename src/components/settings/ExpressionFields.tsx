@@ -34,9 +34,13 @@ export function ExpressionFields({
 
   return (
     <>
-      <label>
-        Expression <code>expression_name</code>
+      <div className="field">
+        <label className="field-label" htmlFor="action-expression">
+          Expression
+          <code>expression_name</code>
+        </label>
         <select
+          id="action-expression"
           onChange={(event) =>
             onChange({
               expression_name: event.target.value || null,
@@ -51,15 +55,17 @@ export function ExpressionFields({
             </option>
           ))}
         </select>
-        <small>
+        <p className="field-hint">
           Blends a VRM expression over the face while the action plays.
-        </small>
-      </label>
+          {availableExpressions.length === 0 &&
+            ' This model defines none beyond the ones Persona drives itself.'}
+        </p>
+      </div>
       {metadata.expression_name && (
-        <div className="expression-weight-field">
+        <div className="field expression-weight-field">
           <div className="expression-weight-row">
             <label>
-              <span>
+              <span className="field-label">
                 Expression weight <code>expression_weight</code>
               </span>
               <input
@@ -111,9 +117,9 @@ export function ExpressionFields({
               value={metadata.expression_weight}
             />
           </div>
-          <small className="field-hint">
+          <p className="field-hint">
             Between 0.00 (expression off) and 1.00 (full strength).
-          </small>
+          </p>
         </div>
       )}
     </>

@@ -1,4 +1,6 @@
-import { ExpressionFields } from './ExpressionFields';
+import { useState } from 'react';
+import { ActionFormDialog } from './ActionFormDialog';
+import { PencilIcon, PlayIcon, PlusIcon, TrashIcon } from './icons';
 
 interface AnimationsSectionProps {
   addAnimationClips: (animation: PersonaAnimationSettings) => Promise<void>;
@@ -7,7 +9,7 @@ interface AnimationsSectionProps {
   beginEditingAnimation: (animation: PersonaAnimationSettings) => void;
   bridge: Window['personaSettings'];
   busy: boolean;
-  createAnimation: () => Promise<void>;
+  createAnimation: () => Promise<boolean>;
   deleteAnimation: (animation: PersonaAnimationSettings) => void;
   deleteAnimationClip: (
     animation: PersonaAnimationSettings,
@@ -53,8 +55,41 @@ export function AnimationsSection({
   setEditingAnimationMetadata,
   settings,
 }: AnimationsSectionProps) {
+  const [creatingAction, setCreatingAction] = useState(false);
+  const editingAnimation = settings.animations.find(
+    (animation) => animation.id === editingAnimationId,
+  );
+
   return (
     <>
+      {creatingAction && (
+        <ActionFormDialog
+          availableExpressions={availableExpressions}
+          busy={busy}
+          metadata={animationMetadata}
+          mode="create"
+          onCancel={() => setCreatingAction(false)}
+          onChange={setAnimationMetadata}
+          onSubmit={() => {
+            void createAnimation().then((created) => {
+              if (created) setCreatingAction(false);
+            });
+          }}
+        />
+      )}
+
+      {editingAnimation && (
+        <ActionFormDialog
+          availableExpressions={availableExpressions}
+          busy={busy}
+          metadata={editingAnimationMetadata}
+          mode="edit"
+          onCancel={() => setEditingAnimationId(null)}
+          onChange={setEditingAnimationMetadata}
+          onSubmit={() => void saveAnimation()}
+        />
+      )}
+
       <section className="settings-panel">
         <div className="panel-heading">
           <div>
@@ -64,366 +99,192 @@ export function AnimationsSection({
               chooses randomly between them when the action runs.
             </p>
           </div>
-          <button
-            className="secondary-button"
-            disabled={
-              busy ||
-              !bridge ||
-              settings.packaged_animation_change_count === 0
-            }
-            onClick={() => void resetPackagedAnimations()}
-            type="button"
-          >
-            Reset packaged actions
-          </button>
+          <div className="panel-actions">
+            <button
+              className="btn btn-ghost"
+              disabled={
+                busy ||
+                !bridge ||
+                settings.packaged_animation_change_count === 0
+              }
+              onClick={() => void resetPackagedAnimations()}
+              type="button"
+            >
+              Reset packaged
+            </button>
+            <button
+              className="btn btn-secondary"
+              disabled={busy || !bridge}
+              onClick={() => setCreatingAction(true)}
+              type="button"
+            >
+              <PlusIcon />
+              New action
+            </button>
+          </div>
         </div>
         <div className="animation-list">
           {settings.animations.map((animation) => (
-            <article
-              className={`animation-card ${
-                animation.system ? 'system-action-card' : ''
-              }`}
-              key={animation.id}
-            >
-              <div className="animation-card-header">
-                <div className="animation-card-copy">
-                  <div>
-                    <strong>
-                      {animation.system
-                        ? animation.animation_type === 'IDLE'
-                          ? 'Idle'
-                          : 'Speaking'
-                        : animation.animation_name}
-                    </strong>
-                    <span>
-                      {animation.system
-                        ? 'System action'
-                        : animation.origin === 'packaged'
-                          ? animation.modified
-                            ? 'Packaged · modified'
-                            : 'Packaged'
-                          : 'Custom action'}
-                    </span>
-                  </div>
-                  <p>{animation.animation_description}</p>
-                  <small>
-                    <b>Trigger:</b>{' '}
-                    {animation.animation_trigger_scenario}
-                  </small>
-                  <small className="animation-card-expression">
-                    <b>Expression:</b>{' '}
+            <article className="action-card" key={animation.id}>
+              <div className="action-head">
+                <div className="action-title">
+                  <strong>
+                    {animation.system
+                      ? animation.animation_type === 'IDLE'
+                        ? 'Idle'
+                        : 'Speaking'
+                      : animation.animation_name}
+                  </strong>
+                  <span
+                    className={`chip ${animation.system ? 'chip-accent' : ''}`}
+                  >
+                    {animation.system
+                      ? 'System'
+                      : animation.origin === 'packaged'
+                        ? animation.modified
+                          ? 'Packaged · modified'
+                          : 'Packaged'
+                        : 'Custom'}
+                  </span>
+                </div>
+                <div className="action-head-actions">
+                  {animation.editable && (
+                    <button
+                      aria-label={`Edit ${animation.animation_name}`}
+                      className="btn btn-ghost btn-icon"
+                      disabled={busy || !bridge}
+                      onClick={() => beginEditingAnimation(animation)}
+                      title="Edit details"
+                      type="button"
+                    >
+                      <PencilIcon />
+                    </button>
+                  )}
+                  {animation.removable && (
+                    <button
+                      aria-label={`Delete ${animation.animation_name}`}
+                      className="btn btn-danger btn-icon"
+                      disabled={busy || !bridge}
+                      onClick={() => void deleteAnimation(animation)}
+                      title="Delete action"
+                      type="button"
+                    >
+                      <TrashIcon />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <p className="action-desc">{animation.animation_description}</p>
+
+              <dl className="meta-list">
+                <div>
+                  <dt>Trigger</dt>
+                  <dd>{animation.animation_trigger_scenario}</dd>
+                </div>
+                <div>
+                  <dt>Expression</dt>
+                  <dd>
                     {animation.expression_name ? (
                       <>
                         {animation.expression_name}
-                        <span className="expression-weight-tag">
+                        <span className="chip">
                           {animation.expression_weight.toFixed(2)}
                         </span>
                       </>
                     ) : (
                       'None'
                     )}
-                  </small>
+                  </dd>
                 </div>
-                <div className="animation-card-actions">
-                  {animation.editable && (
-                    <button
-                      disabled={busy || !bridge}
-                      onClick={() => beginEditingAnimation(animation)}
-                      type="button"
-                    >
-                      Edit
-                    </button>
-                  )}
-                  {animation.removable && (
-                    <button
-                      className="danger-text-button"
-                      disabled={busy || !bridge}
-                      onClick={() => void deleteAnimation(animation)}
-                      type="button"
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
+              </dl>
+
+              <div className="subhead">
+                <span>
+                  Clips
+                  <span className="chip">{animation.clips.length}</span>
+                </span>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  disabled={busy || !bridge}
+                  onClick={() => void addAnimationClips(animation)}
+                  type="button"
+                >
+                  <PlusIcon />
+                  Add clips
+                </button>
               </div>
 
-              <div className="animation-clips">
-                <div className="animation-clips-heading">
-                  <div>
-                    <strong>VRMA clips</strong>
-                    <span>
-                      {animation.clips.length === 0
-                        ? 'No clips added'
-                        : `${animation.clips.length} ${
-                            animation.clips.length === 1
-                              ? 'clip'
-                              : 'clips'
-                          }`}
-                    </span>
-                  </div>
-                  <button
-                    className="secondary-button add-clips-button"
-                    disabled={busy || !bridge}
-                    onClick={() => void addAnimationClips(animation)}
-                    type="button"
-                  >
-                    + Add VRMA files
-                  </button>
-                </div>
-                {animation.clips.length === 0 ? (
-                  <p className="empty-clips">
-                    {animation.system
-                      ? `Upload one or more clips for the ${
-                          animation.animation_type === 'IDLE'
-                            ? 'idle'
-                            : 'speaking'
-                        } state. Persona uses the model pose until then.`
-                      : 'Upload one or more clips to make this action available to MCP.'}
-                  </p>
-                ) : (
-                  <div className="clip-list">
-                    {animation.clips.map((clip) => (
+              {animation.clips.length === 0 ? (
+                <p className="empty-clips">
+                  {animation.system
+                    ? `Add one or more clips for the ${
+                        animation.animation_type === 'IDLE'
+                          ? 'idle'
+                          : 'speaking'
+                      } state. Persona holds the model's own pose until then.`
+                    : 'Add one or more clips to make this action available to MCP.'}
+                </p>
+              ) : (
+                <div className="rows rows-grid">
+                  {animation.clips.map((clip) => {
+                    const playing = previewClipId === clip.id;
+                    return (
                       <div
-                        aria-label={`Preview ${clip.animation_name}`}
-                        className={`clip-chip ${
-                          previewClipId === clip.id ? 'playing' : ''
-                        }`}
+                        className={`row-wrap ${clip.removable ? 'row-wrap-actionable' : ''}`}
                         key={clip.id}
-                        onClick={(event) => {
-                          if (
-                            (event.target as Element).closest('button')
-                          ) {
-                            return;
-                          }
-                          playAnimationClip(animation, clip);
-                        }}
-                        onKeyDown={(event) => {
-                          if (
-                            event.target !== event.currentTarget ||
-                            (event.key !== 'Enter' && event.key !== ' ')
-                          ) {
-                            return;
-                          }
-                          event.preventDefault();
-                          playAnimationClip(animation, clip);
-                        }}
-                        tabIndex={0}
-                        title={`Preview ${clip.animation_name}`}
                       >
-                        <span className="clip-file-icon">VRMA</span>
-                        <strong>{clip.animation_name}</strong>
-                        <small>
-                          {clip.origin === 'packaged'
-                            ? 'Packaged'
-                            : 'Uploaded'}
-                        </small>
+                        <button
+                          aria-label={`Preview ${clip.animation_name}`}
+                          aria-pressed={playing}
+                          className={`row row-selectable ${playing ? 'is-selected' : ''}`}
+                          onClick={() => playAnimationClip(animation, clip)}
+                          title={`Preview ${clip.animation_name}`}
+                          type="button"
+                        >
+                          <span className="row-mark row-mark-play">
+                            <PlayIcon />
+                          </span>
+                          <span className="row-copy">
+                            <strong>{clip.animation_name}</strong>
+                            <small>
+                              {clip.origin === 'packaged'
+                                ? 'Packaged'
+                                : 'Uploaded'}
+                            </small>
+                          </span>
+                          <span className="row-trailing">
+                            {playing && (
+                              <span className="chip chip-accent">Playing</span>
+                            )}
+                          </span>
+                        </button>
                         {clip.removable && (
-                          <button
-                            aria-label={`Delete ${clip.animation_name}`}
-                            className="clip-delete"
-                            disabled={busy || !bridge}
-                            onClick={() =>
-                              void deleteAnimationClip(animation, clip)
-                            }
-                            title={`Delete ${clip.animation_name}`}
-                            type="button"
-                          >
-                            ×
-                          </button>
+                          <div className="row-actions row-actions-overlay">
+                            <button
+                              aria-label={`Delete ${clip.animation_name}`}
+                              className="btn btn-danger btn-icon"
+                              disabled={busy || !bridge}
+                              onClick={() =>
+                                void deleteAnimationClip(animation, clip)
+                              }
+                              title={`Delete ${clip.animation_name}`}
+                              type="button"
+                            >
+                              <TrashIcon />
+                            </button>
+                          </div>
                         )}
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </article>
           ))}
         </div>
       </section>
 
-      {editingAnimationId && (
-        <section className="settings-panel import-panel edit-panel">
-          <div className="panel-heading">
-            <div>
-              <h2>Edit action details</h2>
-              <p>
-                These details describe the action to the Persona MCP
-                tool. Clips remain grouped under the action if its name
-                changes.
-              </p>
-            </div>
-          </div>
-          <div className="form-stack">
-            <label>
-              Action name <code>animation_name</code>
-              <input
-                maxLength={48}
-                onChange={(event) =>
-                  setEditingAnimationMetadata((current) => ({
-                    ...current,
-                    animation_name: event.target.value,
-                  }))
-                }
-                value={editingAnimationMetadata.animation_name}
-              />
-            </label>
-            <label>
-              Description <code>animation_description</code>
-              <textarea
-                maxLength={240}
-                onChange={(event) =>
-                  setEditingAnimationMetadata((current) => ({
-                    ...current,
-                    animation_description: event.target.value,
-                  }))
-                }
-                rows={3}
-                value={
-                  editingAnimationMetadata.animation_description
-                }
-              />
-            </label>
-            <label>
-              Trigger scenario{' '}
-              <code>animation_trigger_scenario</code>
-              <textarea
-                maxLength={240}
-                onChange={(event) =>
-                  setEditingAnimationMetadata((current) => ({
-                    ...current,
-                    animation_trigger_scenario: event.target.value,
-                  }))
-                }
-                rows={3}
-                value={
-                  editingAnimationMetadata.animation_trigger_scenario
-                }
-              />
-            </label>
-            <ExpressionFields
-              metadata={editingAnimationMetadata}
-              onChange={(patch) =>
-                setEditingAnimationMetadata((current) => ({
-                  ...current,
-                  ...patch,
-                }))
-              }
-              availableExpressions={availableExpressions}
-            />
-          </div>
-          <div className="form-actions">
-            <button
-              className="primary-button"
-              disabled={
-                busy ||
-                !editingAnimationMetadata.animation_name.trim() ||
-                !editingAnimationMetadata.animation_description.trim() ||
-                !editingAnimationMetadata.animation_trigger_scenario.trim()
-              }
-              onClick={() => void saveAnimation()}
-              type="button"
-            >
-              Save changes
-            </button>
-            <button
-              className="secondary-button"
-              disabled={busy}
-              onClick={() => setEditingAnimationId(null)}
-              type="button"
-            >
-              Cancel
-            </button>
-          </div>
-        </section>
-      )}
-
-      <section className="settings-panel import-panel">
-        <div className="panel-heading">
-          <div>
-            <h2>Create a custom action</h2>
-            <p>
-              Create the MCP-visible action first, then add any number
-              of VRMA clips from its card above.
-            </p>
-          </div>
-          <span className="file-pill">Action</span>
-        </div>
-        <div className="form-stack">
-          <label>
-            Action name <code>animation_name</code>
-            <input
-              maxLength={48}
-              onChange={(event) =>
-                setAnimationMetadata((current) => ({
-                  ...current,
-                  animation_name: event.target.value,
-                }))
-              }
-              placeholder="e.g. wave-hello"
-              value={animationMetadata.animation_name}
-            />
-            <small>
-              Lowercase letters, numbers, and hyphens. Clips added to
-              this action are named automatically, such as wave-hello1
-              and wave-hello2.
-            </small>
-          </label>
-          <label>
-            Description <code>animation_description</code>
-            <textarea
-              maxLength={240}
-              onChange={(event) =>
-                setAnimationMetadata((current) => ({
-                  ...current,
-                  animation_description: event.target.value,
-                }))
-              }
-              placeholder="Describe what the movement looks and feels like."
-              rows={3}
-              value={animationMetadata.animation_description}
-            />
-          </label>
-          <label>
-            Trigger scenario <code>animation_trigger_scenario</code>
-            <textarea
-              maxLength={240}
-              onChange={(event) =>
-                setAnimationMetadata((current) => ({
-                  ...current,
-                  animation_trigger_scenario: event.target.value,
-                }))
-              }
-              placeholder="Explain when an agent should choose this action."
-              rows={3}
-              value={animationMetadata.animation_trigger_scenario}
-            />
-          </label>
-          <ExpressionFields
-            metadata={animationMetadata}
-            onChange={(patch) =>
-              setAnimationMetadata((current) => ({
-                ...current,
-                ...patch,
-              }))
-            }
-            availableExpressions={availableExpressions}
-          />
-        </div>
-        <button
-          className="primary-button"
-          disabled={
-            busy ||
-            !bridge ||
-            !animationMetadata.animation_name.trim() ||
-            !animationMetadata.animation_description.trim() ||
-            !animationMetadata.animation_trigger_scenario.trim()
-          }
-          onClick={() => void createAnimation()}
-          type="button"
-        >
-          Create action
-        </button>
-      </section>
     </>
   );
 }

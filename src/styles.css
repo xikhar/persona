@@ -38,7 +38,17 @@
   --fs-sm: 12px;
   --fs-md: 13px;
   --fs-lg: 15px;
-  --fs-xl: 20px;
+  --fs-xl: 22px;
+
+  /* Spacing. One scale, so every gap in the window is a multiple of 4. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 32px;
+  --sp-8: 40px;
 
   /* Radii */
   --r-sm: 5px;
@@ -46,6 +56,19 @@
   --r-lg: 10px;
   --r-xl: 14px;
   --r-full: 999px;
+
+  /* Control heights. Every clickable control lands on one of these. */
+  --h-sm: 28px;
+  --h-md: 32px;
+  --h-lg: 36px;
+
+  /* The reading measure for descriptive copy. */
+  --measure: 64ch;
+
+  /* Settings content stops widening past this and centres instead. A label at
+     one edge of a 1600px panel and its control at the other is not a row the
+     eye can pair up. */
+  --content-max: 900px;
 
   /* Motion */
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -307,7 +330,7 @@ button {
 
 .settings-app {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) minmax(300px, 34%);
+  grid-template-columns: 212px minmax(0, 1fr) minmax(272px, 29%);
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -318,7 +341,7 @@ button {
 }
 
 .settings-app.preview-collapsed {
-  grid-template-columns: 220px minmax(0, 1fr) 44px;
+  grid-template-columns: 212px minmax(0, 1fr) 44px;
 }
 
 /* --- Sidebar ------------------------------------------------------------- */
@@ -399,17 +422,26 @@ button {
   background: var(--accent-soft);
 }
 
-/* Active marker instead of a full accent border. */
+/* Active marker inside the item, so it reads as part of the row rather than
+   as a sliver pinned to the window edge. */
 .settings-sidebar nav button.active::before {
   content: "";
   position: absolute;
   top: 50%;
-  left: -12px;
+  left: 0;
   width: 3px;
-  height: 18px;
+  height: 20px;
   transform: translateY(-50%);
-  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  border-radius: var(--r-full);
   background: var(--accent);
+}
+
+.settings-sidebar nav button.active .settings-nav-copy strong {
+  font-weight: 600;
+}
+
+.settings-sidebar nav button.active .nav-glyph {
+  color: var(--accent-text);
 }
 
 .settings-nav-copy {
@@ -466,15 +498,6 @@ button {
   font-size: var(--fs-xs);
 }
 
-.status-dot,
-.preview-live i {
-  width: 6px;
-  height: 6px;
-  flex: 0 0 auto;
-  border-radius: var(--r-full);
-  background: var(--success);
-}
-
 /* --- Content pane -------------------------------------------------------- */
 
 .settings-content {
@@ -492,16 +515,23 @@ button {
 }
 
 .settings-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 24px 28px 18px;
+  padding: var(--sp-6) var(--sp-6) var(--sp-4);
+  /* The rule stays full-bleed while its content lines up with the panels. */
   border-bottom: 1px solid var(--border);
 }
 
+.settings-heading-inner {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-5);
+  width: 100%;
+  max-width: var(--content-max);
+  margin-inline: auto;
+}
+
 /* Title first, description underneath — reads as a real page header. */
-.settings-heading > div {
+.settings-heading-inner > div {
   display: flex;
   min-width: 0;
   flex-direction: column-reverse;
@@ -516,7 +546,7 @@ button {
   line-height: 1.25;
 }
 
-.settings-heading .eyebrow {
+.settings-heading-inner .eyebrow {
   color: var(--text-secondary);
   font-size: var(--fs-md);
   font-weight: 400;
@@ -602,29 +632,42 @@ button {
   display: flex;
   flex: 1;
   flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
   min-height: 0;
-  padding: 4px 28px 40px;
+  padding: var(--sp-5) var(--sp-6) var(--sp-8);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
 
-.settings-panel {
-  flex: 0 0 auto;
-  padding: 24px 0;
-  border-bottom: 1px solid var(--border);
+.settings-scroll > * {
+  width: 100%;
+  max-width: var(--content-max);
 }
 
-.settings-panel:last-child {
-  border-bottom: 0;
+/* Every block of settings is a card on the working surface. Hairline rules
+   between sections read as one long document; discrete cards let the eye find
+   the group it wants without reading the headings. */
+.settings-panel {
+  flex: 0 0 auto;
+  padding: var(--sp-5);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  background: var(--bg-card);
 }
 
 .panel-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+
+/* A heading with nothing under it is a label for the panel, not a header. */
+.panel-heading:last-child {
+  margin-bottom: 0;
 }
 
 .panel-heading > div {
@@ -639,10 +682,18 @@ button {
   line-height: 1.35;
 }
 
+/* The trailing side of a panel heading: one action, or a status chip. */
+.panel-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: var(--sp-2);
+}
+
 .panel-heading p,
 .desktop-note {
   margin: 4px 0 0;
-  max-width: 62ch;
+  max-width: var(--measure);
   color: var(--text-secondary);
   font-size: var(--fs-sm);
   line-height: 1.55;
@@ -663,7 +714,723 @@ button {
 
 /* 5. Primitives =========================================================== */
 
-/* --- Buttons ------------------------------------------------------------- */
+/* --- Buttons -------------------------------------------------------------
+   One base, four intents, three sizes. Everything clickable that is not a row
+   or a field uses this; the older per-section button rules below are being
+   retired onto it. */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  height: var(--h-md);
+  padding: 0 var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  color: var(--text-primary);
+  background: transparent;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    color var(--dur) var(--ease),
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--text-on-accent);
+  background: var(--accent);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn-primary:active:not(:disabled) {
+  background: var(--accent-active);
+}
+
+.btn-secondary {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: var(--bg-raised);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.btn-ghost {
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--fill-hover);
+}
+
+.btn-danger {
+  color: var(--danger-text);
+  background: transparent;
+}
+
+.btn-danger:hover:not(:disabled) {
+  color: var(--danger-text-hover);
+  background: var(--danger-soft);
+}
+
+/* A secondary button whose action is destructive: the frame keeps it grouped
+   with its neighbours, the colour says what it does. */
+.btn-danger-text {
+  color: var(--danger-text);
+}
+
+.btn-danger-text:hover:not(:disabled) {
+  border-color: var(--danger-border);
+  color: var(--danger-text-hover);
+  background: var(--danger-soft);
+}
+
+.btn-sm {
+  height: var(--h-sm);
+  padding: 0 10px;
+  font-size: var(--fs-sm);
+}
+
+.btn-icon {
+  width: var(--h-sm);
+  height: var(--h-sm);
+  padding: 0;
+}
+
+.btn-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+/* --- Rows ----------------------------------------------------------------
+   The list primitive: a leading mark, a two-line copy block, and a trailing
+   action cluster. Models, animation clips, voice sources, and MCP tools are
+   all this shape, and previously each drew its own. */
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--bg-raised);
+}
+
+.row {
+  display: grid;
+  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: 52px;
+  padding: 10px var(--sp-3);
+  border: 0;
+  border-top: 1px solid var(--border);
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  transition: background var(--dur) var(--ease);
+}
+
+.row:first-child {
+  border-top: 0;
+}
+
+.row-selectable {
+  cursor: pointer;
+}
+
+/* The list clips its corners, so an outset focus ring on a row would be cut
+   off. Draw it inside the row instead. */
+.row:focus-visible {
+  outline-offset: -2px;
+}
+
+.row-selectable:hover {
+  background: var(--fill-hover);
+}
+
+/* Selected is carried by colour and a check, never by the check alone: the
+   whole row has to read as chosen at a glance across a long list. */
+.row[aria-checked='true'],
+.row.is-selected {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.row[aria-checked='true']:hover,
+.row.is-selected:hover {
+  background: var(--accent-soft-hover);
+}
+
+.row-mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text-tertiary);
+  background: var(--fill-subtle);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  overflow: hidden;
+}
+
+.row[aria-checked='true'] .row-mark {
+  border-color: var(--accent-border);
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+
+.row-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.row-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.row-copy strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--fs-md);
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-copy small {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Trailing actions stay out of the way until the row is pointed at or holds
+   focus, so a long list reads as content rather than a wall of buttons. The
+   badge that says *what a row is* is not an action and always shows. */
+.row-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: var(--sp-1);
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.row:hover .row-actions,
+.row:focus-within .row-actions,
+.row-actions:focus-within,
+.row[aria-checked='true'] .row-actions {
+  opacity: 1;
+}
+
+/* Pointer-less input never fires hover, so never hide the actions there. */
+@media (hover: none) {
+  .row-actions {
+    opacity: 1;
+  }
+}
+
+.row-trailing {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: var(--sp-2);
+}
+
+/* A dense list — many short, equal items such as animation clips — reads
+   better as a wrapping grid than as one long column. Each item becomes its own
+   bordered tile, so there are no dividers to reconcile across columns. */
+.rows-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  gap: var(--sp-2);
+  border: 0;
+  border-radius: 0;
+  background: none;
+  overflow: visible;
+}
+
+.rows-grid .row-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--bg-card);
+}
+
+.rows-grid .row {
+  min-height: 48px;
+  border-top: 0;
+}
+
+.rows-grid .row-wrap-actionable .row {
+  padding-right: 44px;
+}
+
+/* A row whose whole surface selects, so its per-item actions cannot be nested
+   buttons. They ride on top of the trailing edge instead, and the row reserves
+   room for them so nothing is ever covered. */
+.row-wrap {
+  position: relative;
+  display: flex;
+}
+
+.row-wrap .row {
+  flex: 1 1 auto;
+}
+
+/* Row actions occupy the same place as the row's trailing badge and trade with
+   it on hover, so no width is reserved for buttons that are not showing. Rows
+   that carry no actions keep their badge at all times. */
+.row-wrap-actionable .row {
+  padding-right: 128px;
+}
+
+.row-actions-overlay {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+}
+
+.row-wrap:hover .row-actions,
+.row-wrap:focus-within .row-actions {
+  opacity: 1;
+}
+
+.row-wrap-actionable:hover .row-trailing,
+.row-wrap-actionable:focus-within .row-trailing {
+  opacity: 0;
+}
+
+.row-trailing {
+  transition: opacity var(--dur) var(--ease);
+}
+
+/* --- Choice cards --------------------------------------------------------
+   A small set of mutually exclusive modes, each needing a sentence of
+   explanation. Radio semantics, so arrow keys move between them. */
+
+.choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--sp-2);
+}
+
+.choice {
+  display: grid;
+  align-items: start;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  color: inherit;
+  background: var(--bg-raised);
+  text-align: left;
+  transition:
+    border-color var(--dur) var(--ease),
+    background var(--dur) var(--ease);
+}
+
+.choice:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-raised);
+}
+
+.choice[aria-checked='true'] {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}
+
+.choice:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.choice-mark {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text-tertiary);
+  background: var(--fill-sunken);
+}
+
+.choice[aria-checked='true'] .choice-mark {
+  border-color: var(--accent-border);
+  color: var(--accent-text);
+  background: var(--accent-soft-hover);
+}
+
+.choice-mark svg {
+  width: 14px;
+  height: 14px;
+}
+
+.choice-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.choice-copy strong {
+  color: var(--text-primary);
+  font-size: var(--fs-md);
+  font-weight: 550;
+}
+
+.choice[aria-checked='true'] .choice-copy strong {
+  color: var(--accent-text);
+}
+
+.choice-copy small {
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+
+/* --- Action cards --------------------------------------------------------
+   One configured animation action: what it is, when Persona runs it, and the
+   clips it can choose from. */
+
+.animation-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.action-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg-raised);
+}
+
+.action-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-height: var(--h-sm);
+}
+
+.action-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: var(--sp-2);
+}
+
+.action-title strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Card-level actions stay visible: unlike a row in a long list, there are few
+   of these and each card is a destination rather than something scanned past. */
+.action-head-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: var(--sp-1);
+}
+
+.action-desc {
+  margin: 0;
+  max-width: var(--measure);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+}
+
+/* --- Metadata list -------------------------------------------------------
+   Label/value pairs where the labels align, so the values read as a column
+   rather than as more prose. */
+
+.meta-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+}
+
+.meta-list > div {
+  display: grid;
+  align-items: baseline;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: var(--sp-2);
+}
+
+.meta-list dt {
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.meta-list dd {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.row-mark-play svg {
+  width: 14px;
+  height: 14px;
+}
+
+.row-selectable:hover .row-mark-play {
+  border-color: var(--accent-border);
+  color: var(--accent-text);
+}
+
+.empty-clips {
+  margin: 0;
+  padding: var(--sp-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-lg);
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+/* --- Stat tiles ----------------------------------------------------------
+   Read-only facts about something running. One grid definition, so the MCP
+   and voice panels no longer disagree about how many fit in a row. */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--sp-2);
+}
+
+/* Four facts wrap to 3 + 1 in an auto-fit grid at this width, stranding the
+   last one. Pair them instead until there is room for the whole row. */
+.tiles-quad {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 1400px) {
+  .tiles-quad {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg-raised);
+}
+
+.tile-label {
+  color: var(--text-tertiary);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tile strong {
+  color: var(--text-primary);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.tile small {
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
+}
+
+/* --- Fields --------------------------------------------------------------
+   Label above, control, hint below. Used by every text input, select, and
+   slider so their labels line up across panels. */
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  font-weight: 550;
+}
+
+.field-hint {
+  max-width: var(--measure);
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.field-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-2);
+}
+
+.field-row .field {
+  flex: 1 1 0;
+}
+
+/* --- Chips ---------------------------------------------------------------
+   A short, non-interactive statement about the thing next to it. */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.chip-accent {
+  color: var(--accent-text);
+}
+
+.chip-success {
+  color: var(--success-text);
+}
+
+.chip-danger {
+  color: var(--danger-text);
+}
+
+/* --- Copyable value ------------------------------------------------------ */
+
+.code-row {
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-3);
+  padding: 10px var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--fill-sunken);
+}
+
+.code-row > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.code-row span {
+  color: var(--text-tertiary);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.code-row code {
+  overflow-x: auto;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.code-row code::-webkit-scrollbar {
+  display: none;
+}
+
+/* --- Stacks -------------------------------------------------------------- */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.stack-tight {
+  gap: var(--sp-2);
+}
+
+/* --- Sub-heading inside a panel ------------------------------------------ */
+
+.subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.subhead > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* --- Buttons (legacy names, retained while sections migrate) ------------- */
 
 .primary-button {
   display: inline-flex;
@@ -727,46 +1494,6 @@ button {
   cursor: default;
 }
 
-/* Ghost text buttons inside cards — real hit targets, not bare 9px labels. */
-.asset-card-footer button:not(.default-badge),
-.animation-card-actions > button {
-  min-height: 26px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: var(--r-sm);
-  color: var(--text-secondary);
-  background: transparent;
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  white-space: nowrap;
-  transition:
-    color var(--dur) var(--ease),
-    background var(--dur) var(--ease);
-}
-
-.asset-card-footer button:hover:not(:disabled),
-.animation-card-actions > button:hover:not(:disabled) {
-  color: var(--text-primary);
-  background: var(--fill-hover);
-}
-
-.asset-card-footer button:disabled,
-.animation-card-actions > button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.danger-text-button {
-  color: var(--danger-text) !important;
-}
-
-.danger-text-button:hover:not(:disabled) {
-  color: var(--danger-text-hover) !important;
-  background: var(--danger-soft) !important;
-}
-
-.asset-card-actions,
-.animation-card-actions,
 .form-actions {
   display: flex;
   align-items: center;
@@ -778,40 +1505,8 @@ button {
   margin-top: 16px;
 }
 
-/* --- Badges -------------------------------------------------------------- */
-
-.file-pill,
-.default-badge,
-.count-badge {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 9px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-full);
-  color: var(--text-secondary);
-  background: var(--bg-raised);
-  font-size: var(--fs-xs);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.default-badge {
-  border-color: var(--accent-border);
-  color: var(--accent-text);
-  background: var(--accent-soft);
-}
-
-.count-badge {
-  height: 20px;
-  padding: 0 7px;
-  color: var(--text-tertiary);
-}
-
 /* --- Fields -------------------------------------------------------------- */
 
-.import-panel label,
 .form-stack label {
   display: flex;
   flex-direction: column;
@@ -823,7 +1518,6 @@ button {
   font-weight: 500;
 }
 
-.import-panel label code,
 .form-stack label code {
   padding: 1px 5px;
   border-radius: var(--r-sm);
@@ -834,7 +1528,6 @@ button {
 }
 
 /* Range inputs bring their own chrome — see .single-range-slider. */
-.import-panel input:not([type="range"]),
 .form-stack input:not([type="range"]),
 .form-stack select,
 .form-stack textarea {
@@ -851,7 +1544,6 @@ button {
     box-shadow var(--dur) var(--ease);
 }
 
-.import-panel input:not([type="range"]),
 .form-stack input:not([type="range"]),
 .form-stack select {
   height: 34px;
@@ -876,20 +1568,17 @@ button {
   line-height: 1.55;
 }
 
-.import-panel input::placeholder,
 .form-stack input::placeholder,
 .form-stack textarea::placeholder {
   color: var(--text-tertiary);
 }
 
-.import-panel input:not([type="range"]):hover,
 .form-stack input:not([type="range"]):hover,
 .form-stack select:hover,
 .form-stack textarea:hover {
   border-color: var(--border-strong);
 }
 
-.import-panel input:not([type="range"]):focus,
 .form-stack input:not([type="range"]):focus,
 .form-stack select:focus,
 .form-stack textarea:focus {
@@ -971,481 +1660,31 @@ button {
   line-height: 1.6;
 }
 
-.asset-grid > .empty-library {
-  grid-column: 1 / -1;
-}
-
 /* 6. Section components =================================================== */
-
-/* --- Model cards --------------------------------------------------------- */
-
-.asset-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 10px;
-}
-
-.asset-card {
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  background: var(--bg-card);
-  transition:
-    border-color var(--dur) var(--ease),
-    background var(--dur) var(--ease),
-    box-shadow var(--dur) var(--ease);
-}
-
-.asset-card:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-raised);
-}
-
-.asset-card.selected {
-  border-color: var(--accent-border);
-  background: var(--bg-raised);
-  box-shadow: inset 0 0 0 1px var(--accent-border);
-}
-
-.asset-card-main {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  width: 100%;
-  padding: 13px 14px;
-  border: 0;
-  text-align: left;
-  background: transparent;
-}
-
-.asset-card-main > span:last-child {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-
-.asset-card-main strong {
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: var(--fs-md);
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.asset-card-main small {
-  overflow: hidden;
-  margin-top: 2px;
-  color: var(--text-tertiary);
-  font-size: var(--fs-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.asset-icon,
-.clip-file-icon {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid var(--border);
-  color: var(--text-tertiary);
-  background: var(--fill-subtle);
-  font-family: var(--font-mono);
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-
-.asset-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--r-md);
-  font-size: var(--fs-xs);
-}
-
-.asset-card.selected .asset-icon {
-  border-color: var(--accent-border);
-  color: var(--accent-text);
-  background: var(--accent-soft);
-}
-
-/* VRoid Hub cards lead with the character's portrait: models are often left
-   unnamed on Hub, so the picture is the only thing that tells them apart. */
-.asset-portrait {
-  display: block;
-  width: 100%;
-  max-height: 220px;
-  aspect-ratio: 4 / 3;
-  border-bottom: 1px solid var(--border);
-  background: var(--fill-subtle);
-  object-fit: cover;
-  /* Hub portraits frame the character centred with headroom above, so bias
-     the crop upwards to keep the face in a box wider than it is tall. */
-  object-position: center 20%;
-}
-
-.asset-portrait-empty {
-  display: grid;
-  place-items: center;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-
-.asset-card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 40px;
-  padding: 6px 10px;
-  border-top: 1px solid var(--border);
-}
 
 /* --- VRoid Hub character groups ------------------------------------------ */
 
-.vroid-character-group {
-  margin-top: 22px;
-}
-
-.vroid-character-group > h3 {
+.vroid-character-group h3 {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 0 10px;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  color: var(--text-primary);
   font-size: var(--fs-md);
   font-weight: 600;
-  letter-spacing: -0.004em;
+}
+
+.vroid-character-group {
+  margin-top: var(--sp-5);
 }
 
 .vroid-character-group > .desktop-note {
-  margin-top: 0;
-}
-
-.vroid-character-group > .desktop-note + .asset-grid {
-  margin-top: 12px;
-}
-
-/* --- Animation action cards ---------------------------------------------- */
-
-.animation-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.animation-card {
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  background: var(--bg-card);
-}
-
-.system-action-card {
-  border-color: var(--border-strong);
-}
-
-.animation-card-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 14px;
-}
-
-.animation-card-copy {
-  min-width: 0;
-}
-
-.animation-card-copy > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.animation-card-copy strong {
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: var(--fs-md);
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.animation-card-copy > div span {
-  flex: 0 0 auto;
-  padding: 1px 7px;
-  border-radius: var(--r-full);
-  color: var(--text-tertiary);
-  background: var(--fill-subtle);
-  font-size: var(--fs-xs);
-  white-space: nowrap;
-}
-
-.system-action-card .animation-card-copy > div span {
-  color: var(--accent-text);
-  background: var(--accent-soft);
-}
-
-.animation-card-copy p {
-  margin: 6px 0 0;
-  max-width: 68ch;
-  color: var(--text-secondary);
-  font-size: var(--fs-sm);
-  line-height: 1.55;
-}
-
-.animation-card-copy small {
-  display: block;
-  margin-top: 4px;
-  max-width: 68ch;
-  color: var(--text-tertiary);
-  font-size: var(--fs-sm);
-  line-height: 1.55;
-}
-
-.animation-card-copy b {
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.animation-card-expression .expression-weight-tag {
-  margin-left: 6px;
-  padding: 1px 5px;
-  border-radius: var(--r-sm);
-  color: var(--text-secondary);
-  background: var(--fill-subtle);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  font-variant-numeric: tabular-nums;
-}
-
-.animation-clips {
-  padding: 12px 14px 14px;
-  border-top: 1px solid var(--border);
-  background: var(--fill-sunken);
-}
-
-.animation-clips-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.animation-clips-heading > div {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-}
-
-.animation-clips-heading strong {
-  color: var(--text-secondary);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-}
-
-.animation-clips-heading span {
-  color: var(--text-tertiary);
-  font-size: var(--fs-sm);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.add-clips-button {
-  min-height: 26px;
-}
-
-.empty-clips {
-  margin: 10px 0 0;
-  max-width: 66ch;
-  color: var(--text-tertiary);
-  font-size: var(--fs-sm);
-  line-height: 1.55;
-}
-
-/* --- Clip chips ---------------------------------------------------------- */
-
-.clip-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.clip-chip {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas:
-    "icon name delete"
-    "icon origin delete";
-  align-items: center;
-  column-gap: 10px;
-  min-width: 0;
-  padding: 8px 8px 8px 9px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--bg-card);
-  cursor: pointer;
-  transition:
-    border-color var(--dur) var(--ease),
-    background var(--dur) var(--ease),
-    box-shadow var(--dur) var(--ease);
-}
-
-.clip-chip:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-raised);
-}
-
-.clip-chip.playing {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px var(--accent-border);
-}
-
-.clip-file-icon {
-  grid-area: icon;
-  width: 32px;
-  height: 30px;
-  border-radius: var(--r-sm);
-  font-size: var(--fs-xs);
-  letter-spacing: 0;
-}
-
-.clip-chip.playing .clip-file-icon {
-  border-color: var(--accent-border);
-  color: var(--accent-text);
-  background: var(--accent-soft-hover);
-}
-
-.clip-chip strong {
-  grid-area: name;
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.clip-chip small {
-  grid-area: origin;
-  overflow: hidden;
-  color: var(--text-tertiary);
-  font-size: var(--fs-xs);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.clip-delete {
-  grid-area: delete;
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--r-sm);
-  color: var(--text-tertiary);
-  background: transparent;
-  font-size: 15px;
-  line-height: 1;
-  transition:
-    color var(--dur) var(--ease),
-    background var(--dur) var(--ease);
-}
-
-.clip-delete:hover:not(:disabled) {
-  color: var(--danger-text);
-  background: var(--danger-soft);
-}
-
-.clip-delete:disabled {
-  opacity: 0.4;
-  cursor: default;
+  margin: 0 0 var(--sp-2);
 }
 
 /* --- Edit panel --------------------------------------------------------- */
 
-.edit-panel {
-  padding-left: 18px;
-  border-left: 2px solid var(--accent);
-}
-
 /* --- Voice source ------------------------------------------------------- */
-
-.voice-mode-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.voice-mode-grid button {
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
-  gap: 2px 10px;
-  min-width: 0;
-  padding: 13px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  color: var(--text-secondary);
-  text-align: left;
-  background: var(--bg-card);
-  transition:
-    border-color var(--dur) var(--ease),
-    background var(--dur) var(--ease),
-    color var(--dur) var(--ease);
-}
-
-.voice-mode-grid button:hover:not(:disabled) {
-  color: var(--text-primary);
-  background: var(--bg-raised);
-}
-
-.voice-mode-grid button[aria-pressed="true"] {
-  border-color: var(--accent-border);
-  color: var(--text-primary);
-  background: var(--accent-soft);
-}
-
-.voice-mode-grid button:disabled {
-  opacity: 0.45;
-}
-
-.voice-mode-icon {
-  display: inline-flex;
-  grid-row: 1 / span 2;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-md);
-  color: var(--accent-text);
-  background: var(--bg-raised);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: var(--fs-sm);
-  font-weight: 600;
-}
-
-.voice-mode-grid strong {
-  overflow: hidden;
-  font-size: var(--fs-md);
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.voice-mode-grid small {
-  color: var(--text-tertiary);
-  font-size: var(--fs-xs);
-  line-height: 1.4;
-}
 
 .voice-source-search {
   display: flex;
@@ -1577,48 +1816,6 @@ button {
 .source-state.unavailable {
   color: var(--danger-text);
   background: var(--danger-soft);
-}
-
-.voice-status-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.voice-status-grid article {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  padding: 13px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  background: var(--bg-card);
-}
-
-.voice-status-grid span {
-  color: var(--text-tertiary);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.voice-status-grid strong {
-  overflow: hidden;
-  margin-top: 8px;
-  font-size: var(--fs-lg);
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.voice-status-grid small {
-  overflow: hidden;
-  margin-top: 3px;
-  color: var(--text-tertiary);
-  font-size: var(--fs-xs);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* --- Appearance --------------------------------------------------------- */
@@ -1857,7 +2054,8 @@ button {
 
 .avatar-window-size-row {
   display: flex;
-  gap: 12px;
+  align-items: flex-end;
+  gap: var(--sp-2);
 }
 
 .avatar-window-size-row label {
@@ -1872,9 +2070,13 @@ button {
   font-weight: 500;
 }
 
+.avatar-window-size-row .btn {
+  height: var(--h-lg);
+}
+
 .avatar-window-size-row input {
   width: 100%;
-  height: 34px;
+  height: var(--h-lg);
   padding: 0 11px;
   border: 1px solid var(--border-strong);
   border-radius: var(--r-md);
@@ -2127,22 +2329,6 @@ button {
   font-size: var(--fs-md);
 }
 
-.lighting-reset-button {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-tertiary);
-  border-radius: var(--r-md);
-  padding: 5px 12px;
-  font-size: var(--fs-sm);
-  cursor: pointer;
-  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
-}
-
-.lighting-reset-button:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--text-primary);
-}
-
 .lighting-panel :is(button, input, select):disabled {
   cursor: not-allowed;
   opacity: 0.5;
@@ -2196,102 +2382,23 @@ button {
 .mcp-health-badge {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 24px;
   flex: 0 0 auto;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-full);
   color: var(--text-secondary);
-  background: var(--bg-raised);
   font-size: var(--fs-xs);
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
-}
-
-.mcp-health-badge i {
-  width: 6px;
-  height: 6px;
-  flex: 0 0 auto;
-  border-radius: var(--r-full);
-  background: var(--text-tertiary);
 }
 
 .mcp-health-badge.online {
-  border-color: var(--success-border);
   color: var(--success-text);
-  background: var(--success-soft);
 }
 
-.mcp-health-badge.online i {
-  background: var(--success);
-}
-
-.mcp-health-badge.starting i {
-  background: var(--warn);
-  animation: pulse 1.4s var(--ease) infinite;
-}
-
-@keyframes pulse {
-  50% {
-    opacity: 0.35;
-  }
+.mcp-health-badge.starting {
+  color: var(--warn);
 }
 
 .mcp-health-badge.unavailable {
-  border-color: var(--danger-border);
   color: var(--danger-text);
-  background: var(--danger-soft);
-}
-
-.mcp-health-badge.unavailable i {
-  background: var(--danger);
-}
-
-.mcp-status-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.mcp-status-grid article {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  padding: 13px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  background: var(--bg-card);
-}
-
-.mcp-status-grid span,
-.mcp-copy-field span {
-  color: var(--text-tertiary);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.mcp-status-grid strong {
-  overflow: hidden;
-  margin-top: 8px;
-  color: var(--text-primary);
-  font-size: var(--fs-lg);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.006em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mcp-status-grid small {
-  overflow: hidden;
-  margin-top: 3px;
-  color: var(--text-tertiary);
-  font-size: var(--fs-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .mcp-error-message {
@@ -2306,10 +2413,10 @@ button {
 }
 
 .settings-disclosure {
-  margin-top: 12px;
+  margin-top: var(--sp-3);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  background: var(--bg-card);
+  background: var(--bg-raised);
 }
 
 .settings-disclosure > summary {
@@ -2348,47 +2455,36 @@ button {
 }
 
 .settings-disclosure-body {
-  padding: 0 14px 14px;
+  padding: 0 var(--sp-3) var(--sp-3);
+}
+
+.settings-disclosure-body .form-stack {
+  gap: var(--sp-3);
+}
+
+.settings-disclosure-body input:not([type='range']) {
+  width: 100%;
+  height: var(--h-lg);
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  outline: none;
+  color: var(--text-primary);
+  background: var(--fill-sunken);
+  font-size: var(--fs-md);
+}
+
+.settings-disclosure-body input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .settings-disclosure-body > .desktop-note {
   margin-top: 0;
 }
 
-.settings-disclosure-body > .mcp-copy-field {
-  margin-top: 10px;
-}
-
-.mcp-copy-field {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  margin-top: 10px;
-  padding: 11px 11px 11px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  background: var(--bg-card);
-}
-
-.mcp-copy-field > div {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.mcp-copy-field code {
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: var(--fs-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mcp-copy-field .secondary-button {
-  flex: 0 0 auto;
+.settings-disclosure-body > .code-row {
+  margin-top: var(--sp-2);
 }
 
 .mcp-tool-list {
@@ -2503,39 +2599,21 @@ button {
 
 .preview-header {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 0 0 14px 30px;
-}
-
-.preview-header > div {
-  min-width: 0;
+  gap: var(--sp-3);
+  height: var(--h-lg);
+  padding: 0 0 var(--sp-3) 30px;
 }
 
 .preview-header strong {
-  display: block;
+  min-width: 0;
   overflow: hidden;
-  margin-top: 3px;
   color: var(--text-primary);
   font-size: var(--fs-md);
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.preview-live {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  color: var(--text-tertiary);
-  font-size: var(--fs-xs);
-}
-
-.preview-live i {
-  display: block;
-  animation: pulse 2.4s var(--ease) infinite;
 }
 
 .preview-stage {
@@ -2636,6 +2714,100 @@ button {
   animation: dialog-in 160ms var(--ease);
 }
 
+/* Form dialogs: one column, and a body that scrolls inside the dialog rather
+   than growing it past the window on a short screen. */
+.settings-dialog:not(.settings-dialog-confirmation) {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: min(720px, calc(100vh - 64px));
+  padding: 0;
+}
+
+.settings-dialog-wide {
+  width: min(560px, calc(100vw - 48px));
+}
+
+.settings-dialog:focus {
+  outline: none;
+}
+
+.settings-dialog-head {
+  flex: 0 0 auto;
+  padding: var(--sp-5) var(--sp-5) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-dialog-head h2 {
+  margin: 5px 0 0;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: -0.006em;
+  line-height: 1.35;
+}
+
+.settings-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--sp-5);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.dialog-lede {
+  margin: 0 0 var(--sp-4);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+}
+
+/* Inputs inside a dialog own their full width: the label above them already
+   says what they are, so there is nothing to sit beside. */
+.settings-dialog-body input:not([type='range']),
+.settings-dialog-body textarea,
+.settings-dialog-body select {
+  width: 100%;
+  padding: 8px var(--sp-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  outline: none;
+  color: var(--text-primary);
+  background: var(--fill-sunken);
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  caret-color: var(--accent-text);
+  transition:
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+.settings-dialog-body input:not([type='range']) {
+  height: var(--h-lg);
+  padding-block: 0;
+}
+
+.settings-dialog-body textarea {
+  min-height: 68px;
+  resize: vertical;
+}
+
+.settings-dialog-body input:focus,
+.settings-dialog-body textarea:focus,
+.settings-dialog-body select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.settings-dialog-body .field-label code {
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+  color: var(--text-tertiary);
+  background: var(--fill-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+}
+
 @keyframes dialog-in {
   from {
     opacity: 0;
@@ -2730,8 +2902,17 @@ button {
   grid-column: 1 / -1;
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--sp-2);
   margin-top: 6px;
+}
+
+.settings-dialog:not(.settings-dialog-confirmation) .settings-dialog-actions {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: var(--sp-3) var(--sp-5);
+  border-top: 1px solid var(--border);
+  background: var(--fill-sunken);
+  border-radius: 0 0 var(--r-xl) var(--r-xl);
 }
 
 .settings-dialog-actions .secondary-button,
@@ -2797,7 +2978,7 @@ button {
   }
 
   .settings-sidebar nav button.active::before {
-    left: -10px;
+    left: 2px;
   }
 
   .settings-sidebar-status {
@@ -2810,11 +2991,6 @@ button {
   .settings-scroll {
     padding-right: 22px;
     padding-left: 22px;
-  }
-
-  .asset-grid,
-  .clip-list {
-    grid-template-columns: 1fr;
   }
 
   .mcp-tool-list article {

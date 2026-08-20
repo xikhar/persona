@@ -197,20 +197,20 @@ export function AppearanceSection({
               value={avatarHeightInput}
             />
           </label>
+          <button
+            className="btn btn-primary"
+            disabled={
+              busy ||
+              !bridge ||
+              !avatarWindowSizeValid ||
+              !avatarWindowSizeChanged
+            }
+            onClick={() => void saveAvatarWindowSize()}
+            type="button"
+          >
+            Apply
+          </button>
         </div>
-        <button
-          className="primary-button"
-          disabled={
-            busy ||
-            !bridge ||
-            !avatarWindowSizeValid ||
-            !avatarWindowSizeChanged
-          }
-          onClick={() => void saveAvatarWindowSize()}
-          type="button"
-        >
-          Apply
-        </button>
         {!bridge && (
           <p className="desktop-note">
             Resizing the avatar window is available in the Persona
@@ -228,14 +228,16 @@ export function AppearanceSection({
               overexposed or too dark.
             </p>
           </div>
-          <button
-            className="lighting-reset-button"
-            disabled={busy || !bridge || !selectedModel}
-            onClick={() => void resetLighting()}
-            type="button"
-          >
-            Reset lighting
-          </button>
+          <div className="panel-actions">
+            <button
+              className="btn btn-secondary"
+              disabled={busy || !bridge || !selectedModel}
+              onClick={() => void resetLighting()}
+              type="button"
+            >
+              Reset
+            </button>
+          </div>
         </div>
 
         <div className="lighting-select-row">

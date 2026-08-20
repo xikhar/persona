@@ -31,7 +31,6 @@ export function McpSection({
             </p>
           </div>
           <span className={`mcp-health-badge ${mcpHealth}`}>
-            <i aria-hidden="true" />
             {mcpHealth === 'online'
               ? 'Online'
               : mcpHealth === 'starting'
@@ -40,9 +39,9 @@ export function McpSection({
           </span>
         </div>
 
-        <div className="mcp-status-grid">
-          <article>
-            <span>Health</span>
+        <div className="tiles tiles-quad">
+          <article className="tile">
+            <span className="tile-label">Health</span>
             <strong>
               {mcpHealth === 'online'
                 ? 'Ready'
@@ -58,13 +57,13 @@ export function McpSection({
                 : 'Waiting for the desktop bridge'}
             </small>
           </article>
-          <article>
-            <span>Transport</span>
+          <article className="tile">
+            <span className="tile-label">Transport</span>
             <strong>{mcpStatus?.transport ?? 'Streamable HTTP'}</strong>
             <small>Model Context Protocol</small>
           </article>
-          <article>
-            <span>Access</span>
+          <article className="tile">
+            <span className="tile-label">Access</span>
             <strong>
               {mcpStatus?.local_only === false
                 ? 'Network'
@@ -72,8 +71,8 @@ export function McpSection({
             </strong>
             <small>Bound to 127.0.0.1</small>
           </article>
-          <article>
-            <span>Persona</span>
+          <article className="tile">
+            <span className="tile-label">Persona</span>
             <strong>v{mcpStatus?.version ?? '—'}</strong>
             <small>Server version</small>
           </article>
@@ -96,7 +95,7 @@ export function McpSection({
             </p>
           </div>
           <button
-            className="secondary-button"
+            className="btn btn-secondary"
             disabled={mcpLoading}
             onClick={() => void refreshMcpStatus()}
             type="button"
@@ -105,13 +104,13 @@ export function McpSection({
           </button>
         </div>
 
-        <div className="mcp-copy-field">
+        <div className="code-row">
           <div>
             <span>Server URL</span>
             <code>{mcpServerUrl}</code>
           </div>
           <button
-            className="secondary-button"
+            className="btn btn-secondary"
             onClick={() => void copyText(mcpServerUrl, 'Server URL')}
             type="button"
           >
@@ -119,13 +118,13 @@ export function McpSection({
           </button>
         </div>
 
-        <div className="mcp-copy-field">
+        <div className="code-row">
           <div>
             <span>Codex setup command</span>
             <code>{mcpSetupCommand}</code>
           </div>
           <button
-            className="secondary-button"
+            className="btn btn-secondary"
             onClick={() =>
               void copyText(mcpSetupCommand, 'Setup command')
             }
@@ -151,7 +150,7 @@ export function McpSection({
               audio access.
             </p>
           </div>
-          <span className="file-pill">
+          <span className="chip">
             {mcpStatus?.tools.length ?? 4} tools
           </span>
         </div>
@@ -174,7 +173,7 @@ export function McpSection({
               at least one VRMA clip.
             </p>
           </div>
-          <span className="file-pill">
+          <span className="chip">
             {mcpStatus?.playable_actions.length ?? 0} active
           </span>
         </div>

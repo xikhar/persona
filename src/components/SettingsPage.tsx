@@ -24,6 +24,7 @@ import { useThemePreference } from '../hooks/useThemePreference';
 import { errorMessage } from '../settings-errors';
 import {
   SECTIONS,
+  sectionSummary,
   settingsSection,
   type SettingsSection,
 } from '../settings-sections';
@@ -242,13 +243,6 @@ export function SettingsPage() {
     },
     [],
   );
-
-  const customModelCount = settings.models.filter(
-    (model) => model.origin === 'user',
-  ).length;
-  const customAnimationCount = settings.animations.filter(
-    (animation) => animation.origin === 'user',
-  ).length;
 
   const previewType: PlayableAnimationType =
     previewAnimation?.animation_type ??
@@ -471,28 +465,32 @@ export function SettingsPage() {
     }
   };
 
-  const importModel = async () => {
-    if (!bridge) return;
+  const importModel = async (): Promise<boolean> => {
+    if (!bridge) return false;
     const existingModelIds = new Set(settings.models.map((model) => model.id));
     const snapshot = await run(
       () => bridge.importModel({ model_name: modelName }),
       'Model added to your library.',
     );
-    if (!snapshot) return;
+    // `null` is a cancelled file picker, not a failure: keep the dialog open
+    // with the typed name so choosing again does not start over.
+    if (!snapshot) return false;
     const imported = snapshot.models.find(
       (model) => !existingModelIds.has(model.id),
     );
     if (imported) setSelectedModelId(imported.id);
     setModelName('');
+    return true;
   };
 
-  const createAnimation = async () => {
-    if (!bridge) return;
+  const createAnimation = async (): Promise<boolean> => {
+    if (!bridge) return false;
     const snapshot = await run(
       () => bridge.createAnimation(animationMetadata),
       'Animation action created. Add one or more VRMA clips to make it playable.',
     );
-    if (!snapshot) return;
+    // A rejected name keeps the dialog open so it can be corrected in place.
+    if (!snapshot) return false;
     setAnimationMetadata({
       animation_name: '',
       animation_description: '',
@@ -500,6 +498,7 @@ export function SettingsPage() {
       expression_name: null,
       expression_weight: 1,
     });
+    return true;
   };
 
   const addAnimationClips = async (animation: PersonaAnimationSettings) => {
@@ -1062,18 +1061,26 @@ export function SettingsPage() {
       ),
     );
 
-  const headingSummary =
-    section === 'mcp'
-      ? mcpStatus
-        ? `${mcpStatus.tools.length} tools · ${mcpStatus.playable_actions.length} playable actions`
-        : 'Local agent connection'
-      : section === 'voice'
-        ? voiceHeading
-        : section === 'developer'
-          ? settings.developer_settings_enabled
-            ? 'Developer settings enabled'
-            : 'Developer settings locked'
-        : `${customModelCount} custom models · ${customAnimationCount} custom actions`;
+  const headingSummary = sectionSummary(section, {
+    avatarWindow: settings.avatar_window,
+    characterSize: settings.character_size,
+    clipCount: settings.animations.reduce(
+      (total, animation) => total + animation.clips.length,
+      0,
+    ),
+    developerEnabled: settings.developer_settings_enabled,
+    mcp: mcpStatus
+      ? {
+          playableActions: mcpStatus.playable_actions.length,
+          tools: mcpStatus.tools.length,
+        }
+      : null,
+    modelCount: settings.models.length,
+    playableActionCount: settings.animations.filter(
+      (animation) => animation.asset_urls.length > 0,
+    ).length,
+    voiceHeading,
+  });
   const mcpHealth = mcpStatus?.health ?? (mcpLoading ? 'starting' : 'unavailable');
   const mcpServerUrl =
     mcpStatus?.server_url ?? 'http://127.0.0.1:47831/mcp';
@@ -1118,7 +1125,6 @@ export function SettingsPage() {
         </nav>
 
         <div className="settings-sidebar-status">
-          <span className="status-dot" />
           <span className="settings-status-copy">Changes save automatically</span>
         </div>
       </aside>
@@ -1129,11 +1135,13 @@ export function SettingsPage() {
         tabIndex={-1}
       >
         <header className="settings-heading">
-          <div>
-            <span className="eyebrow">{settingsSection(section).eyebrow}</span>
-            <h1>{settingsSection(section).label}</h1>
+          <div className="settings-heading-inner">
+            <div>
+              <span className="eyebrow">{settingsSection(section).eyebrow}</span>
+              <h1>{settingsSection(section).label}</h1>
+            </div>
+            <span className="library-count">{headingSummary}</span>
           </div>
-          <span className="library-count">{headingSummary}</span>
         </header>
 
         {notice && (
@@ -1313,14 +1321,8 @@ export function SettingsPage() {
         {!previewCollapsed && (
           <>
             <div className="preview-header">
-              <div>
-                <span className="eyebrow">Live preview</span>
-                <strong>{selectedModel?.model_name ?? 'Persona'}</strong>
-              </div>
-              <span className="preview-live">
-                <i />
-                Live
-              </span>
+              <strong>{selectedModel?.model_name ?? 'Persona'}</strong>
+              <span className="chip chip-success">Live</span>
             </div>
             <div className="preview-stage" data-testid="settings-preview">
               {selectedModel && (
@@ -1356,13 +1358,15 @@ export function SettingsPage() {
                 Drag to rotate · Scroll to zoom
               </div>
             </div>
-            <div className="preview-now-playing">
-              <span>Now previewing</span>
-              <strong>{previewTitle}</strong>
-              {previewAnimation && (
-                <small>{previewAnimation.animation_description}</small>
-              )}
-            </div>
+            {previewClip && (
+              <div className="preview-now-playing">
+                <span>Now playing</span>
+                <strong>{previewTitle}</strong>
+                {previewAnimation && (
+                  <small>{previewAnimation.animation_description}</small>
+                )}
+              </div>
+            )}
           </>
         )}
       </aside>
@@ -1381,7 +1385,7 @@ export function SettingsPage() {
             aria-describedby="settings-confirmation-detail"
             aria-labelledby="settings-confirmation-title"
             aria-modal="true"
-            className="settings-dialog"
+            className="settings-dialog settings-dialog-confirmation"
             onKeyDown={(event) => {
               if (event.key === 'Escape' && !confirming) {
                 event.preventDefault();
@@ -1423,7 +1427,7 @@ export function SettingsPage() {
             </div>
             <div className="settings-dialog-actions">
               <button
-                className="secondary-button"
+                className="btn btn-secondary"
                 disabled={confirming}
                 onClick={closeConfirmation}
                 ref={confirmationCancelRef}

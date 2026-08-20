@@ -1,7 +1,49 @@
+import type { ReactNode } from 'react';
+import { AutomaticIcon, ExternalIcon, RegexIcon, WindowIcon } from './icons';
 import {
   voicePatternRisk,
   voicePatternRiskMessage,
 } from '../../voice-pattern-risk';
+
+interface VoiceModeChoice {
+  description: string;
+  icon: ReactNode;
+  id: PersonaVoiceSourceSettings['mode'];
+  label: string;
+  /** Whether picking it is already a complete instruction Persona can save. */
+  savesImmediately: boolean;
+}
+
+const VOICE_MODES: readonly VoiceModeChoice[] = [
+  {
+    id: 'default',
+    label: 'Automatic',
+    description: 'Detect ChatGPT or Codex output.',
+    icon: <AutomaticIcon />,
+    savesImmediately: true,
+  },
+  {
+    id: 'application',
+    label: 'Application',
+    description: 'Pick a running app or playback stream.',
+    icon: <WindowIcon />,
+    savesImmediately: false,
+  },
+  {
+    id: 'custom',
+    label: 'Advanced',
+    description: 'Match processes with a regular expression.',
+    icon: <RegexIcon />,
+    savesImmediately: false,
+  },
+  {
+    id: 'external',
+    label: 'External',
+    description: 'Receive levels directly from a pipeline.',
+    icon: <ExternalIcon />,
+    savesImmediately: true,
+  },
+];
 
 interface VoiceSectionProps {
   bridge: Window['personaSettings'];
@@ -68,61 +110,33 @@ export function VoiceSection({
 
         <div
           aria-label="Voice source mode"
-          className="voice-mode-grid"
-          role="group"
+          className="choice-grid"
+          role="radiogroup"
         >
-          <button
-            aria-pressed={voiceMode === 'default'}
-            data-testid="voice-mode-default"
-            disabled={busy || !bridge}
-            onClick={() => chooseVoiceMode('default')}
-            type="button"
-          >
-            <span className="voice-mode-icon" aria-hidden="true">
-              A
-            </span>
-            <strong>Automatic</strong>
-            <small>Detect ChatGPT or Codex output.</small>
-          </button>
-          <button
-            aria-pressed={voiceMode === 'application'}
-            data-testid="voice-mode-application"
-            disabled={busy || !bridge}
-            onClick={() => setVoiceMode('application')}
-            type="button"
-          >
-            <span className="voice-mode-icon" aria-hidden="true">
-              ◎
-            </span>
-            <strong>Application</strong>
-            <small>Pick a running app or playback stream.</small>
-          </button>
-          <button
-            aria-pressed={voiceMode === 'custom'}
-            data-testid="voice-mode-custom"
-            disabled={busy || !bridge}
-            onClick={() => setVoiceMode('custom')}
-            type="button"
-          >
-            <span className="voice-mode-icon" aria-hidden="true">
-              .*
-            </span>
-            <strong>Advanced</strong>
-            <small>Match processes with a regular expression.</small>
-          </button>
-          <button
-            aria-pressed={voiceMode === 'external'}
-            data-testid="voice-mode-external"
-            disabled={busy || !bridge}
-            onClick={() => chooseVoiceMode('external')}
-            type="button"
-          >
-            <span className="voice-mode-icon" aria-hidden="true">
-              ↗
-            </span>
-            <strong>External</strong>
-            <small>Receive levels directly from a pipeline.</small>
-          </button>
+          {VOICE_MODES.map((mode) => (
+            <button
+              aria-checked={voiceMode === mode.id}
+              className="choice"
+              data-testid={`voice-mode-${mode.id}`}
+              disabled={busy || !bridge}
+              key={mode.id}
+              onClick={() =>
+                // Automatic and External are complete choices on their own;
+                // the other two need a value before there is anything to save.
+                mode.savesImmediately
+                  ? chooseVoiceMode(mode.id)
+                  : setVoiceMode(mode.id)
+              }
+              role="radio"
+              type="button"
+            >
+              <span className="choice-mark">{mode.icon}</span>
+              <span className="choice-copy">
+                <strong>{mode.label}</strong>
+                <small>{mode.description}</small>
+              </span>
+            </button>
+          ))}
         </div>
       </section>
 
@@ -138,7 +152,7 @@ export function VoiceSection({
               </p>
             </div>
             <button
-              className="secondary-button"
+              className="btn btn-secondary"
               disabled={voiceSourcesLoading || !bridge}
               onClick={() => void refreshVoiceSources()}
               type="button"
@@ -272,7 +286,7 @@ export function VoiceSection({
           </p>
           <div className="panel-actions">
             <button
-              className="primary-button"
+              className="btn btn-primary"
               data-testid="voice-source-save"
               disabled={
                 busy ||
@@ -301,7 +315,7 @@ export function VoiceSection({
               </p>
             </div>
           </div>
-          <div className="mcp-copy-field">
+          <div className="code-row">
             <div>
               <span>Events endpoint</span>
               <code>
@@ -310,7 +324,7 @@ export function VoiceSection({
               </code>
             </div>
             <button
-              className="secondary-button"
+              className="btn btn-secondary"
               onClick={() =>
                 void copyText(
                   voiceCatalog?.events_url ??
@@ -338,7 +352,7 @@ export function VoiceSection({
             <p>Current state of the local voice integration.</p>
           </div>
           <button
-            className="secondary-button"
+            className="btn btn-secondary"
             disabled={voiceSourcesLoading || !bridge}
             onClick={() => void refreshVoiceSources()}
             type="button"
@@ -346,9 +360,9 @@ export function VoiceSection({
             Check status
           </button>
         </div>
-        <div className="voice-status-grid">
-          <article>
-            <span>Mode</span>
+        <div className="tiles">
+          <article className="tile">
+            <span className="tile-label">Mode</span>
             <strong>{voiceHeading}</strong>
             <small>
               {settings.voice_source.mode === 'custom'
@@ -359,8 +373,8 @@ export function VoiceSection({
                     'ChatGPT and Codex'}
             </small>
           </article>
-          <article>
-            <span>Status</span>
+          <article className="tile">
+            <span className="tile-label">Status</span>
             <strong>
               {settings.voice_source.mode === 'external'
                 ? 'Waiting for events'
@@ -376,8 +390,8 @@ export function VoiceSection({
                 'No active output stream'}
             </small>
           </article>
-          <article>
-            <span>Available</span>
+          <article className="tile">
+            <span className="tile-label">Available</span>
             <strong>{voiceCatalog?.sources.length ?? 0}</strong>
             <small>
               {voiceCatalog?.platform === 'linux'

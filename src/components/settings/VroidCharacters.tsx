@@ -38,17 +38,15 @@ function VroidCharacterPortrait({
 
   if (portrait == null) {
     return (
-      <span aria-hidden="true" className="asset-portrait asset-portrait-empty">
+      <span aria-hidden="true" className="row-mark">
         VRM
       </span>
     );
   }
   return (
-    <img
-      alt={`${character.name} portrait`}
-      className="asset-portrait"
-      src={portrait}
-    />
+    <span className="row-mark">
+      <img alt={`${character.name} portrait`} src={portrait} />
+    </span>
   );
 }
 
@@ -65,22 +63,28 @@ function VroidCharacterCard({
   portraitEpoch: number;
 }) {
   return (
-    <article className="asset-card">
-      <VroidCharacterPortrait character={character} key={portraitEpoch} />
-      <span className="asset-card-main">
-        <span>
+    <div className="row-wrap row-wrap-actionable">
+      <div className="row">
+        <VroidCharacterPortrait character={character} key={portraitEpoch} />
+        <span className="row-copy">
           <strong>{character.name}</strong>
           <small>
             {character.is_downloadable ? 'Downloadable on Hub' : 'Hub only'}
           </small>
         </span>
-      </span>
-      <div className="asset-card-footer">
-        <button disabled={busy} onClick={onSelect} type="button">
-          Use this character
+        <span className="row-trailing" />
+      </div>
+      <div className="row-actions row-actions-overlay">
+        <button
+          className="btn btn-secondary btn-sm"
+          disabled={busy}
+          onClick={onSelect}
+          type="button"
+        >
+          Use
         </button>
       </div>
-    </article>
+    </div>
   );
 }
 
@@ -105,14 +109,14 @@ export function VroidCharacterGroup({
     <div className="vroid-character-group">
       <h3>
         {title}
-        <span className="count-badge">{characters.length}</span>
+        <span className="chip">{characters.length}</span>
       </h3>
       {characters.length === 0 ? (
         <p className="desktop-note">{emptyNote}</p>
       ) : (
         <>
           {note && <p className="desktop-note">{note}</p>}
-          <div className="asset-grid">
+          <div className="rows rows-grid">
             {characters.map((character) => (
               <VroidCharacterCard
                 busy={busy}

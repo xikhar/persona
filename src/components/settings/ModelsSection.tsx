@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import { RefreshIcon, TrashIcon } from './icons';
+import { ModelFormDialog } from './ModelFormDialog';
 import { VroidCharacterGroup } from './VroidCharacters';
 
 interface ModelsSectionProps {
@@ -9,7 +12,7 @@ interface ModelsSectionProps {
   deleteModel: (model: PersonaModelSettings) => void;
   disconnectVroidHub: () => void;
   heartedVroidCharacters: PersonaVroidHubCharacter[];
-  importModel: () => Promise<void>;
+  importModel: () => Promise<boolean>;
   modelName: string;
   ownVroidCharacters: PersonaVroidHubCharacter[];
   refreshVroidCharacters: () => Promise<void>;
@@ -65,116 +68,124 @@ export function ModelsSection({
   vroidPortraitEpoch,
   vroidStatus,
 }: ModelsSectionProps) {
+  // Adding is a task, not a permanent part of the panel: an always-open form
+  // pushes the library the user actually came to read down the page.
+  const [addingModel, setAddingModel] = useState(false);
+
+  const closeAddModel = () => {
+    setAddingModel(false);
+    setModelName('');
+  };
+
   return (
     <>
+      {addingModel && (
+        <ModelFormDialog
+          busy={busy}
+          canImport={bridge != null}
+          name={modelName}
+          onCancel={closeAddModel}
+          onChooseFile={() => {
+            void importModel().then((imported) => {
+              if (imported) closeAddModel();
+            });
+          }}
+          onNameChange={setModelName}
+        />
+      )}
+
       <section className="settings-panel">
         <div className="panel-heading">
           <div>
-            <h2>Model library</h2>
-            <p>Select a model to inspect it in the preview.</p>
+            <h2>Character library</h2>
+            <p>
+              Pick a model to preview it. The default is the one Persona
+              wears when it starts.
+            </p>
+          </div>
+          <div className="panel-actions">
+            <button
+              className="btn btn-secondary"
+              disabled={busy || !bridge}
+              onClick={() => setAddingModel(true)}
+              type="button"
+            >
+              Add model
+            </button>
           </div>
         </div>
-        <div className="asset-grid">
-          {settings.models.length === 0 && (
-            <div className="empty-library">
-              <strong>No model configured</strong>
-              <p>
-                Add a VRM file below. Persona stays inactive until a
-                model is available and selected as the default.
-              </p>
-            </div>
-          )}
-          {settings.models.map((model) => {
-            const selected = model.id === selectedModel?.id;
-            const isDefault = model.id === settings.default_model_id;
-            return (
-              <article
-                className={`asset-card ${selected ? 'selected' : ''}`}
-                key={model.id}
-              >
-                <button
-                  className="asset-card-main"
-                  onClick={() => setSelectedModelId(model.id)}
-                  type="button"
+
+        {settings.models.length === 0 ? (
+          <div className="empty-library">
+            <strong>No model configured</strong>
+            <p>
+              Add a VRM file to get started. Persona stays inactive until a
+              model is available and selected as the default.
+            </p>
+          </div>
+        ) : (
+          <div className="rows" role="radiogroup" aria-label="Character library">
+            {settings.models.map((model) => {
+              const selected = model.id === selectedModel?.id;
+              const isDefault = model.id === settings.default_model_id;
+              const actionable = !isDefault || model.removable;
+              return (
+                <div
+                  className={`row-wrap ${actionable ? 'row-wrap-actionable' : ''}`}
+                  key={model.id}
                 >
-                  <span className="asset-icon">VRM</span>
-                  <span>
-                    <strong>{model.model_name}</strong>
-                    <small>
-                      {model.origin === 'packaged'
-                        ? 'Packaged model'
-                        : model.origin === 'hub'
-                          ? 'From VRoid Hub'
-                          : 'User model'}
-                    </small>
-                  </span>
-                </button>
-                <div className="asset-card-footer">
-                  {isDefault ? (
-                    <span className="default-badge">Default</span>
-                  ) : (
-                    <button
-                      disabled={busy || !bridge}
-                      onClick={() => void setDefaultModel(model.id)}
-                      type="button"
-                    >
-                      Make default
-                    </button>
-                  )}
-                  <div className="asset-card-actions">
-                    <button
-                      onClick={() => setSelectedModelId(model.id)}
-                      type="button"
-                    >
-                      Preview
-                    </button>
-                    {model.removable && (
+                  <button
+                    aria-checked={selected}
+                    className="row row-selectable"
+                    onClick={() => setSelectedModelId(model.id)}
+                    role="radio"
+                    type="button"
+                  >
+                    <span className="row-mark">VRM</span>
+                    <span className="row-copy">
+                      <strong>{model.model_name}</strong>
+                      <small>
+                        {model.origin === 'packaged'
+                          ? 'Packaged with Persona'
+                          : model.origin === 'hub'
+                            ? 'From VRoid Hub'
+                            : 'Added by you'}
+                      </small>
+                    </span>
+                    <span className="row-trailing">
+                      {isDefault && <span className="chip chip-accent">Default</span>}
+                    </span>
+                  </button>
+                  {actionable && (
+                  <div className="row-actions row-actions-overlay">
+                    {!isDefault && (
                       <button
-                        className="danger-text-button"
+                        className="btn btn-ghost btn-sm"
                         disabled={busy || !bridge}
-                        onClick={() => void deleteModel(model)}
+                        onClick={() => void setDefaultModel(model.id)}
                         type="button"
                       >
-                        Delete
+                        Set default
+                      </button>
+                    )}
+                    {model.removable && (
+                      <button
+                        aria-label={`Delete ${model.model_name}`}
+                        className="btn btn-danger btn-icon"
+                        disabled={busy || !bridge}
+                        onClick={() => void deleteModel(model)}
+                        title={`Delete ${model.model_name}`}
+                        type="button"
+                      >
+                        <TrashIcon />
                       </button>
                     )}
                   </div>
+                  )}
                 </div>
-              </article>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="settings-panel import-panel">
-        <div className="panel-heading">
-          <div>
-            <h2>Add a custom model</h2>
-            <p>Persona copies the selected VRM into your local library.</p>
+              );
+            })}
           </div>
-          <span className="file-pill">.vrm</span>
-        </div>
-        <label>
-          Model name <code>model_name</code>
-          <input
-            maxLength={80}
-            onChange={(event) => setModelName(event.target.value)}
-            placeholder="e.g. Studio Assistant"
-            value={modelName}
-          />
-        </label>
-        <button
-          className="primary-button"
-          disabled={busy || !bridge || !modelName.trim()}
-          onClick={() => void importModel()}
-          type="button"
-        >
-          Choose VRM file
-        </button>
-        {!bridge && (
-          <p className="desktop-note">
-            File import is available in the Persona desktop app.
-          </p>
         )}
       </section>
 
@@ -188,9 +199,42 @@ export function ModelsSection({
               yourself.
             </p>
           </div>
-          {vroidStatus?.connected && (
-            <span className="default-badge">Connected</span>
-          )}
+          <div className="panel-actions">
+            {vroidStatus?.connected && (
+              <>
+                <span className="chip chip-success">Connected</span>
+                <button
+                  className="btn btn-secondary"
+                  disabled={busy || vroidLoading}
+                  onClick={() => void refreshVroidCharacters()}
+                  type="button"
+                >
+                  <RefreshIcon />
+                  {vroidLoading ? 'Refreshing…' : 'Refresh'}
+                </button>
+                <button
+                  className="btn btn-secondary btn-danger-text"
+                  disabled={busy}
+                  onClick={disconnectVroidHub}
+                  type="button"
+                >
+                  Disconnect
+                </button>
+              </>
+            )}
+            {vroidHubBridge &&
+              vroidStatus?.configured &&
+              !vroidStatus.connected && (
+                <button
+                  className="btn btn-primary"
+                  disabled={busy}
+                  onClick={() => void connectVroidHub()}
+                  type="button"
+                >
+                  Connect account
+                </button>
+              )}
+          </div>
         </div>
         {!vroidHubBridge && (
           <p className="desktop-note">
@@ -213,13 +257,13 @@ export function ModelsSection({
                 its redirect URI to the value below, then paste the
                 app&rsquo;s client ID and secret here.
               </p>
-              <div className="mcp-copy-field">
+              <div className="code-row">
                 <div>
                   <span>Redirect URI to register</span>
                   <code>{vroidStatus?.redirect_uri ?? '—'}</code>
                 </div>
                 <button
-                  className="secondary-button"
+                  className="btn btn-secondary"
                   disabled={!vroidStatus}
                   onClick={() =>
                     vroidStatus &&
@@ -262,7 +306,7 @@ export function ModelsSection({
               </div>
               <div className="form-actions">
                 <button
-                  className="primary-button"
+                  className="btn btn-primary"
                   disabled={
                     vroidCredentialsSaving ||
                     !vroidClientIdInput.trim() ||
@@ -277,7 +321,7 @@ export function ModelsSection({
                 </button>
                 {vroidStatus?.configured && (
                   <button
-                    className="secondary-button danger-text-button"
+                    className="btn btn-secondary btn-danger-text"
                     disabled={busy}
                     onClick={clearVroidCredentials}
                     type="button"
@@ -288,16 +332,6 @@ export function ModelsSection({
               </div>
             </div>
           </details>
-        )}
-        {vroidHubBridge && vroidStatus?.configured && !vroidStatus.connected && (
-          <button
-            className="primary-button"
-            disabled={busy}
-            onClick={() => void connectVroidHub()}
-            type="button"
-          >
-            Connect VRoid Hub account
-          </button>
         )}
         {vroidHubBridge && vroidStatus?.connected && (
           <>
@@ -336,24 +370,6 @@ export function ModelsSection({
                 />
               </>
             )}
-            <div className="form-actions">
-              <button
-                className="secondary-button"
-                disabled={busy || vroidLoading}
-                onClick={() => void refreshVroidCharacters()}
-                type="button"
-              >
-                Refresh list
-              </button>
-              <button
-                className="secondary-button danger-text-button"
-                disabled={busy}
-                onClick={disconnectVroidHub}
-                type="button"
-              >
-                Disconnect
-              </button>
-            </div>
           </>
         )}
       </section>
