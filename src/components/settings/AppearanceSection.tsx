@@ -134,7 +134,7 @@ export function AppearanceSection({
           aria-label="Default character size"
           className="single-range-slider size-slider"
           max="1.6"
-          min="0.7"
+          min="0.4"
           onBlur={(event) =>
             void saveCharacterSize(Number(event.currentTarget.value))
           }
@@ -152,12 +152,12 @@ export function AppearanceSection({
             void saveCharacterSize(Number(event.currentTarget.value))
           }
           step="0.05"
-          style={singleRangeStyle(settings.character_size, 0.7, 1.6)}
+          style={singleRangeStyle(settings.character_size, 0.4, 1.6)}
           type="range"
           value={settings.character_size}
         />
         <div className="slider-labels">
-          <span>70%</span>
+          <span>40%</span>
           <span>Default</span>
           <span>160%</span>
         </div>

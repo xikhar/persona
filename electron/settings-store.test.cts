@@ -423,6 +423,8 @@ test("validates custom metadata, files, duplicates, and appearance settings", (c
   );
   assert.throws(() => store.setCharacterSize(2), /between/);
   assert.equal(store.setCharacterSize(1.25).character_size, 1.25);
+  assert.equal(store.setCharacterSize(0.4).character_size, 0.4);
+  assert.throws(() => store.setCharacterSize(0.35), /between/);
   assert.throws(() => store.setBodyTransitionMs(49), /between/);
   assert.equal(store.setBodyTransitionMs(400).body_transition_ms, 400);
   assert.throws(() => store.setSpeakingDebounceMs(3001), /between/);

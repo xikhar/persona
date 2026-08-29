@@ -119,7 +119,7 @@ export const DEFAULT_PACKAGED_LIBRARY_PATH = path.join(
   "assets",
   "library.json",
 );
-export const MIN_CHARACTER_SIZE = 0.7;
+export const MIN_CHARACTER_SIZE = 0.4;
 export const MAX_CHARACTER_SIZE = 1.6;
 export const MIN_AVATAR_WINDOW_WIDTH = 320;
 export const MAX_AVATAR_WINDOW_WIDTH = 2160;

@@ -399,6 +399,9 @@ export function Scene(props: SceneProps) {
           scale={grounding.scale}
         />
       )}
+      {/* The full-body framing at the 0.4 size floor sits ~12.3 units out
+          for the packaged models in a default 430x680 window; 14 keeps the
+          orbit clamp from swallowing the smallest size. */}
       <OrbitControls
         makeDefault
         enableDamping
@@ -406,7 +409,7 @@ export function Scene(props: SceneProps) {
         enablePan={props.enablePan ?? true}
         enableZoom
         minDistance={1.4}
-        maxDistance={12}
+        maxDistance={14}
         panSpeed={0.7}
         rotateSpeed={0.45}
         screenSpacePanning
