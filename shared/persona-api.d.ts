@@ -163,8 +163,20 @@ export interface PersonaAnimationClipSettings {
   id: string;
   animation_name: string;
   origin: 'packaged' | 'user';
+  source: 'packaged' | 'imported' | 'kimodo';
   removable: boolean;
   asset_url: string;
+}
+
+export interface PersonaAnimationLibraryClip {
+  id: string;
+  clip_name: string;
+  source: 'imported' | 'kimodo';
+  asset_url: string;
+  created_at: string;
+  prompt: string | null;
+  generation_job_id: string | null;
+  linked_action_ids: string[];
 }
 
 export interface CustomAnimationMetadata {
@@ -209,6 +221,8 @@ export interface PersonaSettingsSnapshot {
   packaged_animation_change_count: number;
   models: PersonaModelSettings[];
   animations: PersonaAnimationSettings[];
+  /** Reusable user-owned VRMA files. Actions only link to these records. */
+  animation_clips: PersonaAnimationLibraryClip[];
   model_lighting: Record<string, PersonaLightingSettings>;
   voice_source: PersonaVoiceSourceSettings;
 }
@@ -233,6 +247,98 @@ export interface PersonaMcpStatus {
   tools: string[];
   transport: string;
   version: string;
+}
+
+export interface PersonaAnimationGeneratorConfig {
+  enabled: boolean;
+  server_url: string;
+  model: string;
+  mcp_enabled: boolean;
+}
+
+export interface PersonaKimodoModel {
+  id: string;
+  label: string;
+  skeleton_key: string;
+  available: boolean;
+  reason: string | null;
+  license: string | null;
+  license_url: string | null;
+}
+
+export interface PersonaAnimationGeneratorStatus {
+  checked_at: string;
+  config: PersonaAnimationGeneratorConfig;
+  error: string | null;
+  health: 'disabled' | 'ready' | 'unavailable';
+  models: PersonaKimodoModel[];
+}
+
+export type PersonaAnimationGenerationPhase =
+  | 'queued'
+  | 'submitting'
+  | 'generating'
+  | 'downloading'
+  | 'converting'
+  | 'installing'
+  | 'ready'
+  | 'failed'
+  | 'interrupted';
+
+export type PersonaAnimationGenerationErrorCode =
+  | 'GENERATOR_CAPACITY_REACHED'
+  | 'GENERATOR_INCOMPATIBLE'
+  | 'GENERATOR_INTERRUPTED'
+  | 'GENERATOR_MODEL_UNAVAILABLE'
+  | 'GENERATOR_OFFLINE'
+  | 'GENERATOR_OUTPUT_INVALID'
+  | 'GENERATOR_QUEUE_REJECTED'
+  | 'GENERATOR_STORAGE_FULL'
+  | 'GENERATOR_TIMED_OUT'
+  | 'CONVERTER_FAILED'
+  | 'VRMA_VALIDATION_FAILED'
+  | 'ASSET_INSTALL_FAILED';
+
+export interface PersonaAnimationGenerationRequest {
+  prompt: string;
+  clip_name?: string;
+  /** @deprecated Generation now creates a reusable clip, not an action. */
+  animation_name?: string;
+  animation_description?: string;
+  animation_trigger_scenario?: string;
+  expression_name?: PersonaExpressionName | null;
+  expression_weight?: number;
+  frames?: number;
+  steps?: number;
+  seed?: number;
+}
+
+export interface PersonaAnimationGenerationJob {
+  id: string;
+  /** Legacy v1 fields. New jobs are not coupled to an action. */
+  action_id: string | null;
+  action_name: string | null;
+  clip_id: string | null;
+  clip_name: string;
+  prompt: string;
+  phase: PersonaAnimationGenerationPhase;
+  error: string | null;
+  error_code: PersonaAnimationGenerationErrorCode | null;
+  /** The active stage that failed or was interrupted, used for safe recovery. */
+  failure_phase: Exclude<PersonaAnimationGenerationPhase, 'ready' | 'failed' | 'interrupted'> | null;
+  /** Starts at one and increases only after an explicit retry. */
+  attempt: number;
+  provider_animation_id: string | null;
+  frames: number;
+  steps: number;
+  seed: number;
+  model: string;
+  model_license: string | null;
+  source_sha256: string | null;
+  vrma_sha256: string | null;
+  converter_version: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PersonaVroidHubStatus {
@@ -307,9 +413,28 @@ export interface PersonaSettingsApi {
   createAnimation(
     metadata: CustomAnimationMetadata,
   ): Promise<PersonaSettingsSnapshot>;
+  createAnimationWithClips(
+    metadata: CustomAnimationMetadata,
+    clipIds: string[],
+  ): Promise<PersonaSettingsSnapshot>;
   addAnimationClips(
     animationId: string,
   ): Promise<PersonaSettingsSnapshot | null>;
+  importAnimationClips(): Promise<PersonaSettingsSnapshot | null>;
+  attachAnimationClip(
+    animationId: string,
+    clipId: string,
+  ): Promise<PersonaSettingsSnapshot>;
+  attachAnimationClips(
+    animationId: string,
+    clipIds: string[],
+  ): Promise<PersonaSettingsSnapshot>;
+  detachAnimationClip(
+    animationId: string,
+    clipId: string,
+  ): Promise<PersonaSettingsSnapshot>;
+  deleteAnimationLibraryClip(clipId: string): Promise<PersonaSettingsSnapshot>;
+  exportAnimationLibraryClip(clipId: string): Promise<boolean>;
   updateAnimation(
     animationId: string,
     metadata: CustomAnimationMetadata,
@@ -356,9 +481,25 @@ export interface PersonaSettingsApi {
   ): Promise<PersonaSettingsSnapshot>;
   resetModelLighting(modelId: string): Promise<PersonaSettingsSnapshot>;
   getMcpStatus(): Promise<PersonaMcpStatus>;
+  openKimodoRepository(): Promise<void>;
+  getAnimationGeneratorStatus(): Promise<PersonaAnimationGeneratorStatus>;
+  setAnimationGeneratorConfig(
+    config: PersonaAnimationGeneratorConfig,
+  ): Promise<PersonaAnimationGeneratorStatus>;
+  checkAnimationGenerator(): Promise<PersonaAnimationGeneratorStatus>;
+  generateAnimation(
+    request: PersonaAnimationGenerationRequest,
+  ): Promise<PersonaAnimationGenerationJob>;
+  retryAnimationGeneration(jobId: string): Promise<PersonaAnimationGenerationJob>;
+  discardAnimationGeneration(jobId: string): Promise<PersonaAnimationGenerationJob[]>;
+  listAnimationGenerations(): Promise<PersonaAnimationGenerationJob[]>;
+  clearAnimationGenerations(): Promise<PersonaAnimationGenerationJob[]>;
   setWindowTheme(theme: 'light' | 'dark'): void;
   subscribe(
     listener: (snapshot: PersonaSettingsSnapshot) => void,
+  ): () => void;
+  subscribeAnimationGenerations(
+    listener: (job: PersonaAnimationGenerationJob) => void,
   ): () => void;
 }
 

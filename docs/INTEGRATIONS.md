@@ -32,8 +32,25 @@ Persona exposes these tools:
 | --- | --- | --- |
 | `play_animation` | `animation`: a playable configured action name | Shows Persona and plays one randomly selected clip from that action |
 | `list_animations` | None | Reads the latest playable action names, descriptions, and trigger scenarios |
+| `list_animation_clips` | None | Reads reusable clip IDs, source prompts, and current action links |
+| `create_animation_action` | Action metadata plus one or more `clip_ids` | Atomically creates an action linked to reusable clips |
+| `attach_animation_clip` | Action name and `clip_id` | Links a reusable clip to an existing action without copying the file |
 | `control_window` | `action`: `show`, `hide`, or `toggle` | Controls the Persona window without quitting the app |
 | `get_status` | None | Reads model readiness, window visibility, voice state, and listener status |
+| `generate_animation` | Prompt plus optional clip title, frames, steps, and seed | Starts one asynchronous reusable-clip job through the configured local Kimodo provider |
+| `get_animation_generation` | `job_id` returned by `generate_animation` | Reads durable generation progress and the installed `clip_id` when ready |
+
+Animation generation and agent-driven action changes are disabled for MCP by default. Configure and verify the
+loopback Kimodo endpoint in **Settings → Kimodo**, then
+explicitly enable agent generation there. `generate_animation` returns before
+inference finishes; poll `get_animation_generation`, then link the ready clip
+with `create_animation_action` or `attach_animation_clip` before calling
+`play_animation`. Failed jobs return an authored error message and stable error
+code without provider response bodies or local paths. Retry and history cleanup
+remain user-facing controls in Settings. Kimodo remains
+a separate, user-managed installation. Persona accepts the pinned SOMA RP
+model's skeleton GLB as source, converts it to a validated VRM Animation, and
+installs the result in the same reusable clip library used by manual uploads.
 
 The animation descriptions are generated from Persona's playable actions.
 Empty actions are omitted until a VRMA clip is added. User uploads, user edits

@@ -6,8 +6,13 @@
 const MCP_TOOL_DESCRIPTIONS: Record<string, string> = {
   play_animation: 'Play any configured action with at least one animation clip.',
   list_animations: 'Read the latest playable actions and their usage details.',
+  list_animation_clips: 'Read reusable clips, generation prompts, and current action links.',
+  create_animation_action: 'Create an action with trigger and expression metadata linked to reusable clips.',
+  attach_animation_clip: 'Link a reusable clip to an existing action without duplicating its file.',
   control_window: 'Show, hide, or toggle the Persona character window.',
   get_status: 'Read window, model, voice, and listener readiness.',
+  generate_animation: 'Start an asynchronous local Kimodo motion-generation job when the user has enabled it.',
+  get_animation_generation: 'Read generation progress and learn when the reusable VRMA clip is ready.',
 };
 
 /** What the section lists before the main process has reported a live catalog. */

@@ -1,9 +1,14 @@
 import { useState } from 'react';
 import { ActionFormDialog } from './ActionFormDialog';
+import { ClipPickerDialog } from './ClipPickerDialog';
 import { PencilIcon, PlayIcon, PlusIcon, TrashIcon } from './icons';
 
 interface AnimationsSectionProps {
-  addAnimationClips: (animation: PersonaAnimationSettings) => Promise<void>;
+  attachAnimationClips: (
+    animationId: string,
+    clipIds: readonly string[],
+  ) => Promise<boolean>;
+  deleteLibraryClip: (clip: PersonaAnimationLibraryClip) => void;
   animationMetadata: CustomAnimationMetadata;
   availableExpressions: readonly string[];
   beginEditingAnimation: (animation: PersonaAnimationSettings) => void;
@@ -11,10 +16,11 @@ interface AnimationsSectionProps {
   busy: boolean;
   createAnimation: () => Promise<boolean>;
   deleteAnimation: (animation: PersonaAnimationSettings) => void;
-  deleteAnimationClip: (
+  detachAnimationClip: (
     animation: PersonaAnimationSettings,
     clip: PersonaAnimationClipSettings,
   ) => void;
+  importAnimationClips: () => Promise<readonly PersonaAnimationLibraryClip[]>;
   editingAnimationId: string | null;
   editingAnimationMetadata: CustomAnimationMetadata;
   playAnimationClip: (
@@ -35,7 +41,7 @@ interface AnimationsSectionProps {
 }
 
 export function AnimationsSection({
-  addAnimationClips,
+  attachAnimationClips,
   animationMetadata,
   availableExpressions,
   beginEditingAnimation,
@@ -43,7 +49,9 @@ export function AnimationsSection({
   busy,
   createAnimation,
   deleteAnimation,
-  deleteAnimationClip,
+  deleteLibraryClip,
+  detachAnimationClip,
+  importAnimationClips,
   editingAnimationId,
   editingAnimationMetadata,
   playAnimationClip,
@@ -56,8 +64,12 @@ export function AnimationsSection({
   settings,
 }: AnimationsSectionProps) {
   const [creatingAction, setCreatingAction] = useState(false);
+  const [clipPickerActionId, setClipPickerActionId] = useState<string | null>(null);
   const editingAnimation = settings.animations.find(
     (animation) => animation.id === editingAnimationId,
+  );
+  const clipPickerAction = settings.animations.find(
+    (animation) => animation.id === clipPickerActionId,
   );
 
   return (
@@ -87,6 +99,19 @@ export function AnimationsSection({
           onCancel={() => setEditingAnimationId(null)}
           onChange={setEditingAnimationMetadata}
           onSubmit={() => void saveAnimation()}
+        />
+      )}
+
+      {clipPickerAction && (
+        <ClipPickerDialog
+          action={clipPickerAction}
+          available={Boolean(bridge)}
+          busy={busy}
+          clips={settings.animation_clips}
+          onAdd={(clipIds) => attachAnimationClips(clipPickerAction.id, clipIds)}
+          onClose={() => setClipPickerActionId(null)}
+          onDelete={deleteLibraryClip}
+          onImport={importAnimationClips}
         />
       )}
 
@@ -124,7 +149,8 @@ export function AnimationsSection({
           </div>
         </div>
         <div className="animation-list">
-          {settings.animations.map((animation) => (
+          {settings.animations.map((animation) => {
+            return (
             <article className="action-card" key={animation.id}>
               <div className="action-head">
                 <div className="action-title">
@@ -204,15 +230,16 @@ export function AnimationsSection({
                   Clips
                   <span className="chip">{animation.clips.length}</span>
                 </span>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  disabled={busy || !bridge}
-                  onClick={() => void addAnimationClips(animation)}
-                  type="button"
-                >
-                  <PlusIcon />
-                  Add clips
-                </button>
+                <div className="action-clip-controls">
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    disabled={busy || !bridge}
+                    onClick={() => setClipPickerActionId(animation.id)}
+                    type="button"
+                  >
+                    <PlusIcon /> Add clip
+                  </button>
+                </div>
               </div>
 
               {animation.clips.length === 0 ? (
@@ -250,7 +277,9 @@ export function AnimationsSection({
                             <small>
                               {clip.origin === 'packaged'
                                 ? 'Packaged'
-                                : 'Uploaded'}
+                                : clip.source === 'kimodo'
+                                  ? 'Kimodo library'
+                                  : 'Imported library'}
                             </small>
                           </span>
                           <span className="row-trailing">
@@ -262,16 +291,16 @@ export function AnimationsSection({
                         {clip.removable && (
                           <div className="row-actions row-actions-overlay">
                             <button
-                              aria-label={`Delete ${clip.animation_name}`}
-                              className="btn btn-danger btn-icon"
+                              aria-label={`Detach ${clip.animation_name}`}
+                              className="btn btn-ghost btn-sm"
                               disabled={busy || !bridge}
                               onClick={() =>
-                                void deleteAnimationClip(animation, clip)
+                                void detachAnimationClip(animation, clip)
                               }
-                              title={`Delete ${clip.animation_name}`}
+                              title={`Detach ${clip.animation_name} from this action`}
                               type="button"
                             >
-                              <TrashIcon />
+                              Detach
                             </button>
                           </div>
                         )}
@@ -281,7 +310,8 @@ export function AnimationsSection({
                 </div>
               )}
             </article>
-          ))}
+            );
+          })}
         </div>
       </section>
 

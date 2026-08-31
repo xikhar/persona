@@ -4,7 +4,34 @@ import {
   buildLuaCommands,
   calculateWindowPosition,
   findHyprlandClient,
+  hyprctlEnvironment,
 } from './hyprland-window.cjs';
+
+test("hyprctl uses host libraries without losing the compositor environment", () => {
+  const parentEnvironment = {
+    APPIMAGE: "/tmp/Persona.AppImage",
+    HYPRLAND_INSTANCE_SIGNATURE: "hyprland-instance",
+    LD_LIBRARY_PATH: "/app/lib:/inherited/electron/lib",
+    LD_PRELOAD: "/app/lib/injected.so",
+    PATH: "/app/bin:/run/current-system/sw/bin",
+    WAYLAND_DISPLAY: "wayland-1",
+  };
+
+  const childEnvironment = hyprctlEnvironment(parentEnvironment);
+
+  assert.equal(childEnvironment.LD_LIBRARY_PATH, undefined);
+  assert.equal(childEnvironment.LD_PRELOAD, undefined);
+  assert.equal(childEnvironment.PATH, parentEnvironment.PATH);
+  assert.equal(
+    childEnvironment.HYPRLAND_INSTANCE_SIGNATURE,
+    parentEnvironment.HYPRLAND_INSTANCE_SIGNATURE,
+  );
+  assert.equal(childEnvironment.WAYLAND_DISPLAY, parentEnvironment.WAYLAND_DISPLAY);
+  assert.equal(
+    parentEnvironment.LD_LIBRARY_PATH,
+    "/app/lib:/inherited/electron/lib",
+  );
+});
 
 test("findHyprlandClient matches the app class and process", () => {
   const clients = [

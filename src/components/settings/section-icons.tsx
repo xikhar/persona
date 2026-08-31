@@ -15,6 +15,12 @@ export const SECTION_ICONS: Record<SettingsSection, ReactNode> = {
       <path d="M6.8 5.8 10.9 8l-4.1 2.2z" />
     </Icon>
   ),
+  kimodo: (
+    <Icon>
+      <path d="M8 1.8 9 5l3.2 1-3.2 1L8 10.2 7 7 3.8 6 7 5z" />
+      <path d="M12.2 10.2l.5 1.6 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5z" />
+    </Icon>
+  ),
   appearance: (
     <Icon>
       <path d="M2.6 5.6v-2a1 1 0 0 1 1-1h2M10.4 2.6h2a1 1 0 0 1 1 1v2M13.4 10.4v2a1 1 0 0 1-1 1h-2M5.6 13.4h-2a1 1 0 0 1-1-1v-2" />

@@ -10,8 +10,10 @@ import { Scene } from './Scene';
 import { AnimationsSection } from './settings/AnimationsSection';
 import { AppearanceSection } from './settings/AppearanceSection';
 import { DeveloperSection } from './settings/DeveloperSection';
+import { KimodoSection } from './settings/KimodoSection';
 import { McpSection } from './settings/McpSection';
 import { ModelsSection } from './settings/ModelsSection';
+import { PlayIcon } from './settings/icons';
 import { SECTION_ICONS } from './settings/section-icons';
 import { VoiceSection } from './settings/VoiceSection';
 import { VroidConditionsOfUse } from './settings/VroidCharacters';
@@ -79,7 +81,11 @@ export function SettingsPage() {
   const [expressionReport, setExpressionReport] =
     useState<ModelExpressionReport | null>(null);
   const [previewClipId, setPreviewClipId] = useState<string | null>(null);
+  const [previewLibraryClipId, setPreviewLibraryClipId] = useState<string | null>(null);
   const [previewRequest, setPreviewRequest] = useState(0);
+  // Retain the last title after playback so the overlay can fade out while the
+  // active preview selection clears without keeping an extra layout row alive.
+  const [previewLabel, setPreviewLabel] = useState('');
   const [modelName, setModelName] = useState('');
   const [animationMetadata, setAnimationMetadata] =
     useState<CustomAnimationMetadata>({
@@ -233,7 +239,13 @@ export function SettingsPage() {
         ? current
         : null;
     });
-  }, [settings.animations]);
+    setPreviewLibraryClipId((current) => {
+      if (!current) return null;
+      return settings.animation_clips.some((clip) => clip.id === current)
+        ? current
+        : null;
+    });
+  }, [settings.animations, settings.animation_clips]);
 
   useEffect(() => {
     if (!notice) return;
@@ -256,10 +268,15 @@ export function SettingsPage() {
     [],
   );
 
-  const previewType: PlayableAnimationType =
-    previewAnimation?.animation_type ??
-    (previewAnimation ? 'CUSTOM' : 'IDLE');
-  const previewExpression = animationExpression(previewAnimation);
+  const libraryPreviewClip = settings.animation_clips.find(
+    (clip) => clip.id === previewLibraryClipId,
+  );
+  const previewType: PlayableAnimationType = libraryPreviewClip
+    ? 'CUSTOM'
+    : previewAnimation?.animation_type ?? (previewAnimation ? 'CUSTOM' : 'IDLE');
+  const previewExpression = libraryPreviewClip
+    ? { expressionName: null, expressionWeight: 1 }
+    : animationExpression(previewAnimation);
   const idleAnimationUrls = useMemo(
     () => animationUrlsForType(settings.animations, 'IDLE'),
     [settings.animations],
@@ -267,15 +284,15 @@ export function SettingsPage() {
   const previewClip = previewAnimation?.clips.find(
     (clip) => clip.id === previewClipId,
   );
+  const previewingClip = Boolean(previewClip || libraryPreviewClip);
   const previewAnimationUrls = useMemo(
-    () => (previewClip ? [previewClip.asset_url] : idleAnimationUrls),
-    [idleAnimationUrls, previewClip],
+    () => libraryPreviewClip
+      ? [libraryPreviewClip.asset_url]
+      : previewClip
+        ? [previewClip.asset_url]
+        : idleAnimationUrls,
+    [idleAnimationUrls, libraryPreviewClip, previewClip],
   );
-
-  const previewTitle = useMemo(() => {
-    if (previewClip) return previewClip.animation_name;
-    return 'Character preview';
-  }, [previewClip]);
 
   const updateSnapshot = useCallback((snapshot: PersonaSettingsSnapshot) => {
     setSettings(snapshot);
@@ -513,19 +530,14 @@ export function SettingsPage() {
     return true;
   };
 
-  const addAnimationClips = async (animation: PersonaAnimationSettings) => {
-    if (!bridge) return;
+  const importAnimationClips = async (): Promise<readonly PersonaAnimationLibraryClip[]> => {
+    if (!bridge) return [];
+    const existingIds = new Set(settings.animation_clips.map((clip) => clip.id));
     const snapshot = await run(
-      () => bridge.addAnimationClips(animation.id),
-      `VRMA clips added to ${animation.animation_name}.`,
+      () => bridge.importAnimationClips(),
+      'VRMA clips imported to the reusable library.',
     );
-    if (!snapshot) return;
-    const updated = snapshot.animations.find(
-      (candidate) => candidate.id === animation.id,
-    );
-    if (previewAnimation?.id === animation.id) {
-      setPreviewAnimation(updated ?? null);
-    }
+    return snapshot?.animation_clips.filter((clip) => !existingIds.has(clip.id)) ?? [];
   };
 
   const setDefaultModel = async (modelId: string) => {
@@ -712,7 +724,7 @@ export function SettingsPage() {
       detail:
         animation.origin === 'packaged'
           ? 'The action will be removed from your active library. Reset packaged actions can restore it.'
-          : 'The action and all of its locally stored VRMA clips will be removed.',
+          : 'Only the action will be removed. Reusable VRMA clips stay in the clip library.',
       onConfirm: async () => {
         const snapshot = await run(
           () => bridge.deleteAnimation(animation.id),
@@ -730,19 +742,19 @@ export function SettingsPage() {
     });
   };
 
-  const deleteAnimationClip = (
+  const detachAnimationClip = (
     animation: PersonaAnimationSettings,
     clip: PersonaAnimationClipSettings,
   ) => {
     if (!bridge || !clip.removable) return;
     openConfirmation({
-      confirmLabel: 'Delete',
-      title: `Delete “${clip.animation_name}”?`,
-      detail: 'The locally stored VRMA clip will be removed.',
+      confirmLabel: 'Detach',
+      title: `Detach “${clip.animation_name}”?`,
+      detail: 'The clip will stop playing for this action, but its VRMA file stays in the reusable library.',
       onConfirm: async () => {
         const snapshot = await run(
-          () => bridge.deleteAnimationClip(animation.id, clip.id),
-          `${clip.animation_name} removed.`,
+          () => bridge.detachAnimationClip(animation.id, clip.id),
+          `${clip.animation_name} detached from ${animation.animation_name}.`,
         );
         if (!snapshot) return;
         const updated = snapshot.animations.find(
@@ -754,6 +766,49 @@ export function SettingsPage() {
         if (previewClipId === clip.id) {
           setPreviewClipId(null);
         }
+      },
+    });
+  };
+
+  const attachAnimationClips = async (
+    animationId: string,
+    clipIds: readonly string[],
+  ): Promise<boolean> => {
+    if (!bridge || clipIds.length === 0) return false;
+    const action = settings.animations.find((candidate) => candidate.id === animationId);
+    const snapshot = await run(
+      () => bridge.attachAnimationClips(animationId, [...clipIds]),
+      `${clipIds.length} clip${clipIds.length === 1 ? '' : 's'} added to ${action?.animation_name ?? 'the action'}.`,
+    );
+    return snapshot != null;
+  };
+
+  const createActionWithClip = async (
+    metadata: CustomAnimationMetadata,
+    clipId: string,
+  ): Promise<boolean> => {
+    if (!bridge) return false;
+    const created = await run(
+      () => bridge.createAnimationWithClips(metadata, [clipId]),
+      `${metadata.animation_name} is ready to use.`,
+    );
+    return created != null;
+  };
+
+  const deleteAnimationLibraryClip = (clip: PersonaAnimationLibraryClip) => {
+    if (!bridge) return;
+    openConfirmation({
+      confirmLabel: 'Delete clip',
+      title: `Delete “${clip.clip_name}”?`,
+      detail: clip.linked_action_ids.length === 0
+        ? 'The locally stored VRMA file will be removed permanently.'
+        : `The VRMA file will be removed and detached from ${clip.linked_action_ids.length} linked action${clip.linked_action_ids.length === 1 ? '' : 's'}.`,
+      onConfirm: async () => {
+        const snapshot = await run(
+          () => bridge.deleteAnimationLibraryClip(clip.id),
+          `${clip.clip_name} deleted from the clip library.`,
+        );
+        if (snapshot && previewLibraryClipId === clip.id) setPreviewLibraryClipId(null);
       },
     });
   };
@@ -1052,8 +1107,18 @@ export function SettingsPage() {
     animation: PersonaAnimationSettings,
     clip: PersonaAnimationClipSettings,
   ) => {
+    setPreviewLabel(clip.animation_name);
+    setPreviewLibraryClipId(null);
     setPreviewAnimation(animation);
     setPreviewClipId(clip.id);
+    setPreviewRequest((request) => request + 1);
+  };
+
+  const previewLibraryClip = (clip: PersonaAnimationLibraryClip) => {
+    setPreviewLabel(clip.clip_name);
+    setPreviewAnimation(null);
+    setPreviewClipId(null);
+    setPreviewLibraryClipId(clip.id);
     setPreviewRequest((request) => request + 1);
   };
 
@@ -1105,6 +1170,7 @@ export function SettingsPage() {
       0,
     ),
     developerEnabled: settings.developer_settings_enabled,
+    generatedClipCount: settings.animation_clips.filter((clip) => clip.source === 'kimodo').length,
     mcp: mcpStatus
       ? {
           playableActions: mcpStatus.playable_actions.length,
@@ -1159,10 +1225,6 @@ export function SettingsPage() {
             </button>
           ))}
         </nav>
-
-        <div className="settings-sidebar-status">
-          <span className="settings-status-copy">Changes save automatically</span>
-        </div>
       </aside>
 
       <section
@@ -1231,7 +1293,7 @@ export function SettingsPage() {
 
           {section === 'animations' && (
             <AnimationsSection
-              addAnimationClips={addAnimationClips}
+              attachAnimationClips={attachAnimationClips}
               animationMetadata={animationMetadata}
               availableExpressions={availableExpressions}
               beginEditingAnimation={beginEditingAnimation}
@@ -1239,9 +1301,11 @@ export function SettingsPage() {
               busy={busy}
               createAnimation={createAnimation}
               deleteAnimation={deleteAnimation}
-              deleteAnimationClip={deleteAnimationClip}
+              deleteLibraryClip={deleteAnimationLibraryClip}
+              detachAnimationClip={detachAnimationClip}
               editingAnimationId={editingAnimationId}
               editingAnimationMetadata={editingAnimationMetadata}
+              importAnimationClips={importAnimationClips}
               playAnimationClip={playAnimationClip}
               previewClipId={previewClipId}
               resetPackagedAnimations={resetPackagedAnimations}
@@ -1249,6 +1313,19 @@ export function SettingsPage() {
               setAnimationMetadata={setAnimationMetadata}
               setEditingAnimationId={setEditingAnimationId}
               setEditingAnimationMetadata={setEditingAnimationMetadata}
+              settings={settings}
+            />
+          )}
+
+          {section === 'kimodo' && (
+            <KimodoSection
+              availableExpressions={availableExpressions}
+              bridge={bridge}
+              busy={busy}
+              createActionWithClip={createActionWithClip}
+              deleteClip={deleteAnimationLibraryClip}
+              notify={setNotice}
+              previewClip={previewLibraryClip}
               settings={settings}
             />
           )}
@@ -1370,6 +1447,7 @@ export function SettingsPage() {
                 <Scene
                   animation={previewType}
                   animationRequest={previewRequest}
+                  animationTransition={previewingClip ? 'immediate' : 'smooth'}
                   animationUrls={previewAnimationUrls}
                   fallbackAnimationUrls={idleAnimationUrls}
                   expressionName={previewExpression.expressionName}
@@ -1387,8 +1465,9 @@ export function SettingsPage() {
                   onAnimationComplete={() => {
                     setPreviewAnimation(null);
                     setPreviewClipId(null);
+                    setPreviewLibraryClipId(null);
                   }}
-                  playback={previewClip ? 'once' : 'loop'}
+                  playback={previewingClip ? 'once' : 'loop'}
                   speaking={previewType === 'TALK'}
                   bodyTransitionMs={settings.body_transition_ms}
                   speakingDebounceMs={settings.speaking_debounce_ms}
@@ -1396,19 +1475,19 @@ export function SettingsPage() {
                   speakingTransition={settings.speaking_transition}
                 />
               )}
-              <div className="preview-hint">
+              <div
+                aria-hidden={!previewingClip}
+                aria-live="polite"
+                className={`preview-playback-label${previewingClip ? ' is-visible' : ''}`}
+                title={previewLabel || undefined}
+              >
+                <PlayIcon />
+                <span>{previewLabel}</span>
+              </div>
+              <div className={`preview-hint${previewingClip ? ' is-hidden' : ''}`}>
                 Drag to rotate · Scroll to zoom
               </div>
             </div>
-            {previewClip && (
-              <div className="preview-now-playing">
-                <span>Now playing</span>
-                <strong>{previewTitle}</strong>
-                {previewAnimation && (
-                  <small>{previewAnimation.animation_description}</small>
-                )}
-              </div>
-            )}
           </>
         )}
       </aside>

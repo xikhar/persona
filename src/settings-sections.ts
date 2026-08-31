@@ -2,6 +2,7 @@
 export type SettingsSection =
   | 'models'
   | 'animations'
+  | 'kimodo'
   | 'appearance'
   | 'voice'
   | 'mcp'
@@ -29,6 +30,12 @@ export const SECTIONS: readonly SettingsSectionDescriptor[] = [
     label: 'Actions',
     description: 'Motion library',
     eyebrow: 'Character configuration',
+  },
+  {
+    id: 'kimodo',
+    label: 'Kimodo',
+    description: 'AI clip studio',
+    eyebrow: 'Local motion generation',
   },
   {
     id: 'appearance',
@@ -72,6 +79,7 @@ export interface SectionSummaryFacts {
   characterSize: number;
   clipCount: number;
   developerEnabled: boolean;
+  generatedClipCount: number;
   mcp: { playableActions: number; tools: number } | null;
   modelCount: number;
   playableActionCount: number;
@@ -100,6 +108,10 @@ export function sectionSummary(
       return facts.clipCount === 0
         ? `${plural(facts.playableActionCount, 'action')} · no clips`
         : `${plural(facts.playableActionCount, 'action')} · ${plural(facts.clipCount, 'clip')}`;
+    case 'kimodo':
+      return facts.generatedClipCount === 0
+        ? 'No generated clips'
+        : plural(facts.generatedClipCount, 'generated clip');
     case 'appearance':
       return `${Math.round(facts.characterSize * 100)}% · ${facts.avatarWindow.width}×${facts.avatarWindow.height}`;
     case 'voice':

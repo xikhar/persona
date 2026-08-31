@@ -487,17 +487,6 @@ button {
   color: var(--accent-text);
 }
 
-.settings-sidebar-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: auto;
-  padding: 14px 10px 2px;
-  border-top: 1px solid var(--border);
-  color: var(--text-tertiary);
-  font-size: var(--fs-xs);
-}
-
 /* --- Content pane -------------------------------------------------------- */
 
 .settings-content {
@@ -2597,7 +2586,7 @@ button {
 .settings-preview {
   position: relative;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   padding: 20px;
@@ -2684,42 +2673,58 @@ button {
   font-size: var(--fs-xs);
   text-align: center;
   pointer-events: none;
+  transition: opacity 160ms var(--ease);
 }
 
-.preview-now-playing {
+.preview-hint.is-hidden {
+  opacity: 0;
+}
+
+/* Keep playback status out of the grid flow so Scene never reframes when a
+   preview starts or completes. */
+.preview-playback-label {
+  position: absolute;
+  z-index: 3;
+  bottom: 12px;
+  left: 50%;
   display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 24px);
   min-width: 0;
-  height: 76px;
-  flex-direction: column;
-  padding: 14px 2px 0;
+  height: 30px;
+  padding: 0 11px;
   overflow: hidden;
-}
-
-.preview-now-playing span {
-  color: var(--text-tertiary);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-card);
   font-size: var(--fs-xs);
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 6px);
+  transition:
+    opacity 160ms var(--ease),
+    transform 160ms var(--ease);
 }
 
-.preview-now-playing strong {
-  overflow: hidden;
-  margin-top: 4px;
-  color: var(--text-primary);
-  font-size: var(--fs-md);
-  font-weight: 600;
-  text-overflow: ellipsis;
-  text-transform: capitalize;
-  white-space: nowrap;
+.preview-playback-label.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
-.preview-now-playing small {
+.preview-playback-label svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.preview-playback-label span {
+  min-width: 0;
   overflow: hidden;
-  margin-top: 2px;
-  color: var(--text-tertiary);
-  font-size: var(--fs-sm);
-  line-height: 1.45;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2809,7 +2814,8 @@ button {
    says what they are, so there is nothing to sit beside. */
 .settings-dialog-body input:not([type='range']),
 .settings-dialog-body textarea,
-.settings-dialog-body select {
+.settings-dialog-body select,
+.generator-config-body input:not([type='range']) {
   width: 100%;
   padding: 8px var(--sp-3);
   border: 1px solid var(--border-strong);
@@ -2825,7 +2831,8 @@ button {
     box-shadow var(--dur) var(--ease);
 }
 
-.settings-dialog-body input:not([type='range']) {
+.settings-dialog-body input:not([type='range']),
+.generator-config-body input:not([type='range']) {
   height: var(--h-lg);
   padding-block: 0;
 }
@@ -2837,7 +2844,8 @@ button {
 
 .settings-dialog-body input:focus,
 .settings-dialog-body textarea:focus,
-.settings-dialog-body select:focus {
+.settings-dialog-body select:focus,
+.generator-config-body input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
@@ -2850,6 +2858,288 @@ button {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   font-weight: 400;
+}
+
+.generator-toggle-row,
+.generator-job {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.clip-library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--sp-3);
+}
+
+.clip-library-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--fill-sunken);
+}
+
+.clip-library-head,
+.clip-library-title,
+.clip-library-tools {
+  display: flex;
+  min-width: 0;
+}
+
+.clip-library-head {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.clip-library-title {
+  flex-direction: column;
+  gap: 3px;
+}
+
+.clip-library-tools {
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.clip-download-button {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px) scale(0.96);
+  transition:
+    color var(--dur) var(--ease),
+    background var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.clip-library-card:hover .clip-download-button,
+.clip-library-card:focus-within .clip-download-button {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+
+@media (hover: none) {
+  .clip-download-button {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+}
+
+.clip-library-head small,
+.clip-link-status {
+  color: var(--text-tertiary);
+  font-size: var(--fs-xs);
+}
+
+.clip-library-card > p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.clip-library-actions,
+.action-clip-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.action-clip-controls {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+  .action-clip-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+.generator-toggle-row > span,
+.generator-job > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.generator-toggle-row small,
+.generator-job small {
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+
+.generator-model-field {
+  max-width: 180px;
+}
+
+.generator-config-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.generator-error {
+  margin: 0;
+  color: var(--danger-text) !important;
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+
+.generator-prompt-fields {
+  padding-bottom: var(--sp-2);
+}
+
+.generator-dialog-status {
+  margin: 0;
+  padding: var(--sp-3);
+  border-radius: var(--r-md);
+  color: var(--text-secondary);
+  background: var(--fill-subtle);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.generator-config-body {
+  max-width: 760px;
+}
+
+.clip-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--sp-2);
+  max-height: 380px;
+  padding: 2px;
+  overflow-y: auto;
+}
+
+.clip-picker-card {
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--fill-sunken);
+  transition:
+    border-color var(--dur) var(--ease),
+    background var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+.clip-picker-card:hover {
+  border-color: var(--border-strong);
+  background: var(--fill-hover);
+}
+
+.clip-picker-card.is-selected {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-border);
+}
+
+.clip-picker-card-select {
+  display: flex;
+  width: 100%;
+  min-height: 108px;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  padding-right: 46px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.clip-picker-card-select:disabled {
+  cursor: default;
+}
+
+.clip-picker-card-top {
+  display: grid;
+  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--sp-2);
+  width: 100%;
+}
+
+.clip-picker-card .row-mark svg {
+  width: 14px;
+  height: 14px;
+}
+
+.clip-picker-card.is-selected .row-mark {
+  border-color: var(--accent-border);
+  color: var(--accent-text);
+  background: var(--accent-soft-hover);
+}
+
+.clip-picker-card-meta {
+  color: var(--text-tertiary);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+
+.clip-picker-card-delete {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+}
+
+.generator-details {
+  border-top: 1px solid var(--border);
+  padding-top: var(--sp-3);
+}
+
+.generator-details summary {
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  font-weight: 550;
+}
+
+.generator-details[open] summary {
+  margin-bottom: var(--sp-4);
+}
+
+.generator-jobs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--border);
+}
+
+.generator-job {
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--fill-sunken);
+}
+
+.generator-job > .generator-job-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sp-1);
 }
 
 @keyframes dialog-in {
@@ -2959,6 +3249,10 @@ button {
   border-radius: 0 0 var(--r-xl) var(--r-xl);
 }
 
+.dialog-footer-spacer {
+  flex: 1 1 auto;
+}
+
 .settings-dialog-actions .secondary-button,
 .settings-dialog-confirm {
   min-width: 84px;
@@ -3010,8 +3304,7 @@ button {
   }
 
   .settings-brand-copy,
-  .settings-nav-copy,
-  .settings-status-copy {
+  .settings-nav-copy {
     display: none !important;
   }
 
@@ -3023,12 +3316,6 @@ button {
 
   .settings-sidebar nav button.active::before {
     left: 2px;
-  }
-
-  .settings-sidebar-status {
-    justify-content: center;
-    padding-right: 0;
-    padding-left: 0;
   }
 
   .settings-heading,

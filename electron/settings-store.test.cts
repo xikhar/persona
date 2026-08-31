@@ -196,6 +196,10 @@ test("imports, persists, resolves, and deletes user assets", (context) => {
     snapshot.animations.some((candidate) => candidate.id === animationId),
     false,
   );
+  assert.equal(fs.existsSync(storedAnimation), true);
+  const libraryClip = snapshot.animation_clips.find((clip) => clip.asset_url === animationUrl);
+  assert.ok(libraryClip);
+  store.deleteAnimationLibraryClip(libraryClip.id);
   assert.equal(fs.existsSync(storedAnimation), false);
   snapshot = store.deleteModel(model.id);
   assert.equal(snapshot.default_model_id, alternate.id);
@@ -319,7 +323,7 @@ test("keeps user library records when migrating the earlier settings schema", (c
   );
 
   const snapshot = createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot();
-  assert.equal(snapshot.schema_version, 9);
+  assert.equal(snapshot.schema_version, 10);
   assert.equal(snapshot.default_model_id, modelId);
   assert.equal(snapshot.character_size, 1.15);
   assert.ok(snapshot.models.some((model) => model.id === modelId));
@@ -700,19 +704,193 @@ test("groups multiple uploaded clips under one action and removes them independe
     throw new Error('Expected the removed clip to resolve to a file path.');
   }
 
-  snapshot = store.deleteAnimationClip(actionId, removedClip.id);
+  snapshot = store.detachAnimationClip(actionId, removedClip.id);
   action = snapshot.animations.find((animation) => animation.id === actionId);
   assert.ok(action);
   assert.deepEqual(
     action.clips.map((clip) => clip.animation_name),
     ["wave2"],
   );
+  assert.equal(fs.existsSync(removedPath), true);
+  store.deleteAnimationLibraryClip(removedClip.id);
   assert.equal(fs.existsSync(removedPath), false);
   assert.throws(() => store.deleteAnimation("system-idle"), /cannot be removed/);
   assert.throws(
     () => store.deleteAnimation("system-speaking"),
     /cannot be removed/,
   );
+});
+
+test('stores generated clips once and links them to actions without transferring ownership', (context) => {
+  const { root, userDataPath, packagedLibraryPath } = fixture(context);
+  const source = path.join(root, 'generated.vrma');
+  writeGlb(source);
+  const store = createSettingsStore({ userDataPath, packagedLibraryPath });
+  const first = store.createAnimation({
+    animation_name: 'wave',
+    animation_description: 'A wave.',
+    animation_trigger_scenario: 'Use for greetings.',
+  }).animations.find((action) => action.animation_name === 'wave');
+  assert.ok(first);
+  const second = store.createAnimation({
+    animation_name: 'celebrate',
+    animation_description: 'A celebration.',
+    animation_trigger_scenario: 'Use for good news.',
+  }).animations.find((action) => action.animation_name === 'celebrate');
+  assert.ok(second);
+
+  let snapshot = store.addGeneratedAnimationClip(source, {
+    clip_name: 'friendly-wave',
+    prompt: 'A friendly wave',
+    generation_job_id: 'job-1',
+  });
+  const clip = snapshot.animation_clips[0];
+  assert.ok(clip);
+  assert.equal(clip.source, 'kimodo');
+  assert.deepEqual(clip.linked_action_ids, []);
+  const storedPath = store.resolveAssetRequest(clip.asset_url);
+  assert.equal(typeof storedPath, 'string');
+  snapshot = store.addGeneratedAnimationClip(source, {
+    clip_name: 'celebration-step',
+    prompt: 'A quick celebratory step',
+    generation_job_id: 'job-2',
+  });
+  const secondClip = snapshot.animation_clips[1];
+  assert.ok(secondClip);
+
+  assert.throws(() => store.createAnimationWithClips({
+    animation_name: 'broken-link',
+    animation_description: 'Should not be stored.',
+    animation_trigger_scenario: 'Never.',
+  }, ['123e4567-e89b-42d3-a456-426614174099']), /not in the reusable library/);
+  assert.equal(store.getSnapshot().animations.some((action) => action.animation_name === 'broken-link'), false);
+  snapshot = store.createAnimationWithClips({
+    animation_name: 'linked-at-create',
+    animation_description: 'Created with a clip.',
+    animation_trigger_scenario: 'Use for an atomic link.',
+  }, [clip.id]);
+  const linkedAtCreate = snapshot.animations.find((action) => action.animation_name === 'linked-at-create');
+  assert.ok(linkedAtCreate);
+  assert.deepEqual(linkedAtCreate.clips.map((linked) => linked.id), [clip.id]);
+
+  store.attachAnimationClip(first.id, clip.id);
+  assert.throws(
+    () => store.attachAnimationClips(second.id, [
+      secondClip.id,
+      '123e4567-e89b-42d3-a456-426614174099',
+    ]),
+    /not in the reusable library/,
+  );
+  assert.deepEqual(store.getSnapshot().animations.find((action) => action.id === second.id)?.clips, []);
+  snapshot = store.attachAnimationClips(second.id, [clip.id, secondClip.id, clip.id]);
+  assert.deepEqual(
+    snapshot.animation_clips[0]?.linked_action_ids.sort(),
+    [first.id, second.id, linkedAtCreate.id].sort(),
+  );
+  assert.deepEqual(snapshot.animations.find((action) => action.id === second.id)?.clips.map((linked) => linked.id), [clip.id, secondClip.id]);
+
+  snapshot = store.deleteAnimation(first.id);
+  assert.equal(snapshot.animation_clips[0]?.linked_action_ids.includes(second.id), true);
+  assert.equal(typeof storedPath === 'string' && fs.existsSync(storedPath), true);
+
+  snapshot = store.deleteAnimationLibraryClip(clip.id);
+  assert.equal(snapshot.animation_clips.length, 1);
+  assert.deepEqual(snapshot.animations.find((action) => action.id === second.id)?.clips.map((linked) => linked.id), [secondClip.id]);
+  assert.equal(snapshot.animations.find((action) => action.id === linkedAtCreate.id)?.clips.length, 0);
+  assert.equal(typeof storedPath === 'string' && fs.existsSync(storedPath), false);
+  snapshot = store.deleteAnimationLibraryClip(secondClip.id);
+  assert.equal(snapshot.animation_clips.length, 0);
+  assert.equal(snapshot.animations.find((action) => action.id === second.id)?.clips.length, 0);
+});
+
+test('rolls back clip imports and removes copied files when settings persistence fails', (context) => {
+  const { root, userDataPath, packagedLibraryPath } = fixture(context);
+  const source = path.join(root, 'rollback-import.vrma');
+  writeGlb(source);
+  const store = createSettingsStore({ userDataPath, packagedLibraryPath });
+  const settingsPath = path.join(userDataPath, 'settings.json');
+  const originalRenameSync = fs.renameSync;
+  fs.renameSync = ((oldPath, newPath) => {
+    if (path.resolve(String(newPath)) === settingsPath) throw new Error('simulated settings commit failure');
+    return originalRenameSync(oldPath, newPath);
+  }) as typeof fs.renameSync;
+  try {
+    assert.throws(
+      () => store.importAnimationClips([source]),
+      /simulated settings commit failure/u,
+    );
+  } finally {
+    fs.renameSync = originalRenameSync;
+  }
+
+  assert.deepEqual(store.getSnapshot().animation_clips, []);
+  assert.deepEqual(
+    fs.readdirSync(path.join(userDataPath, 'assets', 'animations')),
+    [],
+  );
+});
+
+test('restores a clip file and links when deletion cannot be committed', (context) => {
+  const { root, userDataPath, packagedLibraryPath } = fixture(context);
+  const source = path.join(root, 'rollback-delete.vrma');
+  writeGlb(source);
+  const store = createSettingsStore({ userDataPath, packagedLibraryPath });
+  let snapshot = store.importAnimationClips([source]);
+  const clip = snapshot.animation_clips[0];
+  assert.ok(clip);
+  const action = store.createAnimationWithClips({
+    animation_name: 'rollback-delete',
+    animation_description: 'Exercise transactional clip deletion.',
+    animation_trigger_scenario: 'Used only by this persistence test.',
+  }, [clip.id]).animations.find((candidate) => candidate.animation_name === 'rollback-delete');
+  assert.ok(action);
+  const storedPath = store.resolveAssetRequest(clip.asset_url);
+  assert.equal(typeof storedPath, 'string');
+  if (typeof storedPath !== 'string') throw new Error('Expected a stored clip path.');
+
+  const settingsPath = path.join(userDataPath, 'settings.json');
+  const originalRenameSync = fs.renameSync;
+  fs.renameSync = ((oldPath, newPath) => {
+    if (path.resolve(String(newPath)) === settingsPath) throw new Error('simulated settings commit failure');
+    return originalRenameSync(oldPath, newPath);
+  }) as typeof fs.renameSync;
+  try {
+    assert.throws(
+      () => store.deleteAnimationLibraryClip(clip.id),
+      /simulated settings commit failure/u,
+    );
+  } finally {
+    fs.renameSync = originalRenameSync;
+  }
+
+  snapshot = store.getSnapshot();
+  assert.equal(snapshot.animation_clips.some((candidate) => candidate.id === clip.id), true);
+  assert.deepEqual(
+    snapshot.animations.find((candidate) => candidate.id === action.id)?.clips.map((candidate) => candidate.id),
+    [clip.id],
+  );
+  assert.equal(fs.existsSync(storedPath), true);
+  assert.equal(fs.existsSync(`${storedPath}.delete`), false);
+
+  const reloaded = createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot();
+  assert.equal(reloaded.animation_clips.some((candidate) => candidate.id === clip.id), true);
+});
+
+test('recovers an exact staged clip deletion after an interrupted commit', (context) => {
+  const { root, userDataPath, packagedLibraryPath } = fixture(context);
+  const source = path.join(root, 'staged-delete.vrma');
+  writeGlb(source);
+  const store = createSettingsStore({ userDataPath, packagedLibraryPath });
+  const clip = store.importAnimationClips([source]).animation_clips[0];
+  assert.ok(clip);
+  const storedPath = store.resolveAssetRequest(clip.asset_url);
+  if (typeof storedPath !== 'string') throw new Error('Expected a stored clip path.');
+  fs.renameSync(storedPath, `${storedPath}.delete`);
+
+  const recovered = createSettingsStore({ userDataPath, packagedLibraryPath });
+  assert.equal(fs.existsSync(storedPath), true);
+  assert.equal(fs.existsSync(`${storedPath}.delete`), false);
+  assert.equal(recovered.getSnapshot().animation_clips[0]?.id, clip.id);
 });
 
 test("persists every voice source mode and migrates schema 4 settings", (context) => {
@@ -729,7 +907,7 @@ test("persists every voice source mode and migrates schema 4 settings", (context
     mode: "custom",
     process_pattern: "  local-tts|open-webui  ",
   });
-  assert.equal(snapshot.schema_version, 9);
+  assert.equal(snapshot.schema_version, 10);
   assert.deepEqual(snapshot.voice_source, {
     mode: "custom",
     process_pattern: "local-tts|open-webui",
@@ -790,7 +968,7 @@ test("persists every voice source mode and migrates schema 4 settings", (context
     userDataPath,
     packagedLibraryPath,
   }).getSnapshot();
-  assert.equal(migrated.schema_version, 9);
+  assert.equal(migrated.schema_version, 10);
   assert.deepEqual(migrated.voice_source, {
     mode: "custom",
     process_pattern: "voice-engine",
@@ -821,7 +999,7 @@ test("migrates schema 6 into locked developer settings without losing transition
     userDataPath,
     packagedLibraryPath,
   }).getSnapshot();
-  assert.equal(snapshot.schema_version, 9);
+  assert.equal(snapshot.schema_version, 10);
   assert.equal(snapshot.developer_settings_enabled, false);
   assert.equal(snapshot.body_transition_ms, 700);
   assert.deepEqual(snapshot.speaking_transition, {
@@ -849,7 +1027,7 @@ test("migrates schema 7 with packaged scheduler delay defaults", (context) => {
     userDataPath,
     packagedLibraryPath,
   }).getSnapshot();
-  assert.equal(snapshot.schema_version, 9);
+  assert.equal(snapshot.schema_version, 10);
   assert.equal(snapshot.body_transition_ms, 600);
   assert.equal(snapshot.speaking_debounce_ms, 350);
   assert.equal(snapshot.idle_interim_ms, 350);
@@ -880,7 +1058,7 @@ test("migrates schema 8 scheduler factors and seconds to milliseconds", (context
     userDataPath,
     packagedLibraryPath,
   }).getSnapshot();
-  assert.equal(snapshot.schema_version, 9);
+  assert.equal(snapshot.schema_version, 10);
   assert.equal(snapshot.body_transition_ms, 800);
   assert.equal(snapshot.speaking_debounce_ms, 2150);
   assert.equal(snapshot.idle_interim_ms, 0);

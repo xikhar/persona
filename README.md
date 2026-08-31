@@ -218,6 +218,17 @@ Only explicitly allowlisted VRM or VRMA paths should be committed. The release
 workflow fails closed when the declared contract is incomplete. Read the
 [asset license terms](public/assets/LICENSES.md).
 
+The dedicated **Kimodo** settings tab can create reusable motion clips from a
+prompt through a separately installed local Kimodo server. Persona converts
+the supported SOMA RP skeleton output into a validated `.vrma`, saves it in a
+clip library, and lets any number of actions link to it without duplicating or
+owning the file. Failed or interrupted jobs retain safe local artifacts so the
+Settings Retry action can resume conversion, installation, or provider polling
+without repeating completed work. Local agents can use the same asynchronous
+generation flow when the user explicitly enables MCP generation. See the
+integration and maintenance documents below before installing the experimental
+provider.
+
 ## Development
 
 ```bash
@@ -237,6 +248,8 @@ More detail:
 
 - [Architecture and development](docs/DEVELOPMENT.md)
 - [Codex and integration API](docs/INTEGRATIONS.md)
+- [Kimodo animation generation integration](docs/KIMODO_INTEGRATION.md)
+- [Kimodo compatibility and maintenance runbook](docs/KIMODO_MAINTENANCE.md)
 - [Release process](docs/RELEASING.md)
 - [Security policy](SECURITY.md)
 

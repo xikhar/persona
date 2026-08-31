@@ -17,6 +17,7 @@ import {
   Tray,
   type MenuItemConstructorOptions,
   type OpenDialogOptions,
+  type SaveDialogOptions,
 } from 'electron';
 import {
   createBridgeServer,
@@ -98,6 +99,11 @@ import type {
   VoiceState,
 } from './types.cjs';
 import { isRecord } from './types.cjs';
+import {
+  createAnimationGenerator,
+  type AnimationGeneratorService,
+} from './animation-generator.cjs';
+import { exportAnimationLibraryClip } from './animation-clip-export.cjs';
 
 // Derived rather than imported so it cannot drift from the union the renderer
 // actually receives.
@@ -129,6 +135,7 @@ const SETTINGS_WINDOW_BACKGROUND = {
   light: "#e6e8ec",
 };
 const PERSONA_ASSET_SCHEME = "persona-asset";
+const KIMODO_REPOSITORY_URL = "https://github.com/localai-org/kimodo.cpp";
 // An integration that crashes, is killed, or simply forgets to send
 // expression-release would otherwise leave the character's face frozen with no
 // way for the user to recover it. Drop a held expression after this long.
@@ -139,6 +146,7 @@ const protocolScheme = "persona";
 const debugEnabled = process.env.PERSONA_DEBUG === "1";
 
 let avatarWindow: BrowserWindow | null = null;
+let avatarRendererLoaded = false;
 let settingsWindow: BrowserWindow | null = null;
 let settingsWindowPresentationGate: SettingsWindowPresentationGate | null = null;
 let settingsStore: SettingsStore | null = null;
@@ -147,6 +155,7 @@ let vroidHubClient: VroidHubClient | null = null;
 let vroidCredentialsFilePath: string | null = null;
 let bridge: BridgeServer | null = null;
 let mcpHandler: PersonaMcpHandler | null = null;
+let animationGenerator: AnimationGeneratorService | null = null;
 let isQuitting = false;
 let latestEvent: AvatarRendererEvent | null = null;
 let latestListenerStatus: AudioListenerStatus | null = null;
@@ -373,6 +382,7 @@ function destroyOverlayForSetup(): void {
     avatarWindow.destroy();
   }
   avatarWindow = null;
+  avatarRendererLoaded = false;
 }
 
 function toggleOverlay(): void {
@@ -441,6 +451,7 @@ function createWindow(): BrowserWindow {
     },
   });
   avatarWindow = window;
+  avatarRendererLoaded = false;
 
   window.setAlwaysOnTop(true, "floating");
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -473,11 +484,19 @@ function createWindow(): BrowserWindow {
     hyprlandConfigured = false;
     hyprlandConfiguring = false;
     avatarWindow = null;
+    avatarRendererLoaded = false;
   });
 
   // Every load needs the flush, including reloads and loads during which no
   // event happened to arrive: a held expression has to be restored either way.
-  window.webContents.on("did-finish-load", flushPendingRendererEvents);
+  window.webContents.on("did-start-loading", () => {
+    if (avatarWindow === window) avatarRendererLoaded = false;
+  });
+  window.webContents.on("did-finish-load", () => {
+    if (avatarWindow !== window) return;
+    avatarRendererLoaded = true;
+    flushPendingRendererEvents();
+  });
 
   const avatarRendererUrl = rendererUrl();
   secureRendererWindow(window, avatarRendererUrl);
@@ -959,8 +978,27 @@ async function selectAssetFile(
   return multiple ? result.filePaths : result.filePaths[0] ?? null;
 }
 
+async function selectAnimationClipExportDestination(
+  suggestedFilename: string,
+): Promise<string | null> {
+  const options: SaveDialogOptions = {
+    title: 'Download VRMA clip',
+    defaultPath: suggestedFilename,
+    filters: [{ name: 'VRM animations', extensions: ['vrma'] }],
+    properties: ['createDirectory', 'showOverwriteConfirmation'],
+  };
+  const result = settingsWindow && !settingsWindow.isDestroyed()
+    ? await dialog.showSaveDialog(settingsWindow, options)
+    : await dialog.showSaveDialog(options);
+  return result.canceled ? null : result.filePath ?? null;
+}
+
 function flushPendingRendererEvents(): void {
-  if (!avatarWindow || avatarWindow.isDestroyed() || avatarWindow.webContents.isLoading()) return;
+  if (
+    !avatarWindow ||
+    avatarWindow.isDestroyed() ||
+    !avatarRendererLoaded
+  ) return;
   for (const event of drainRendererEventsForLoad(
     pendingRendererEvents,
     heldExpression?.event ?? null,
@@ -973,7 +1011,7 @@ function sendToRenderer(event: AvatarRendererEvent): void {
   const pendingKey = pendingRendererEvents.add(event);
   if (!avatarWindow || avatarWindow.isDestroyed()) return;
   // The did-finish-load listener will flush whatever is queued here.
-  if (avatarWindow.webContents.isLoading()) return;
+  if (!avatarRendererLoaded) return;
   avatarWindow.webContents.send("persona:event", event);
   pendingRendererEvents.delete(pendingKey);
 }
@@ -1214,6 +1252,32 @@ if (!app.requestSingleInstanceLock()) {
       ),
     });
     settingsStore = store;
+    animationGenerator = createAnimationGenerator(app.getPath('userData'), {
+      assertCanAddGeneratedClip: () => store.assertCanAddAnimationClips(),
+      addGeneratedClip: (filePath, metadata) =>
+        store.addGeneratedAnimationClip(filePath, metadata),
+      findGeneratedClip: (jobId) => {
+        const clip = store.getSnapshot().animation_clips.find(
+          (candidate) => candidate.generation_job_id === jobId,
+        );
+        return clip ? { id: clip.id, clip_name: clip.clip_name } : null;
+      },
+      publishSettings: (snapshot) => {
+        publishSettings(snapshot);
+      },
+      onJobUpdated: (job) => {
+        if (
+          settingsWindow &&
+          !settingsWindow.isDestroyed() &&
+          !settingsWindow.webContents.isLoading()
+        ) {
+          settingsWindow.webContents.send(
+            'persona:animation-generation-updated',
+            job,
+          );
+        }
+      },
+    });
     const initialSettingsSnapshot = store.getSnapshot();
     modelConfigured = snapshotHasConfiguredModel(initialSettingsSnapshot);
     // Seeded before the avatar window is created, so its first flags already
@@ -1285,6 +1349,16 @@ if (!app.requestSingleInstanceLock()) {
       publishSettings(store.createAnimation(metadata)),
     );
     handleFromSettings(
+      'persona:settings-create-animation-with-clips',
+      (metadata: unknown, clipIds: unknown) => {
+        if (!Array.isArray(clipIds)) throw new Error('Animation clip ids are required.');
+        return publishSettings(store.createAnimationWithClips(
+          metadata,
+          clipIds.map((clipId) => requiredIpcString(clipId, 'Animation clip id')),
+        ));
+      },
+    );
+    handleFromSettings(
       "persona:settings-add-animation-clips",
       async (animationId: unknown) => {
         const filePaths = await selectAssetFile("animation", true);
@@ -1295,6 +1369,14 @@ if (!app.requestSingleInstanceLock()) {
             filePaths,
           ),
         );
+      },
+    );
+    handleFromSettings(
+      'persona:settings-import-animation-clips',
+      async () => {
+        const filePaths = await selectAssetFile('animation', true);
+        if (filePaths.length === 0) return null;
+        return publishSettings(store.importAnimationClips(filePaths));
       },
     );
     handleFromSettings(
@@ -1318,11 +1400,43 @@ if (!app.requestSingleInstanceLock()) {
       "persona:settings-delete-animation-clip",
       (animationId: unknown, clipId: unknown) =>
         publishSettings(
-          store.deleteAnimationClip(
+          store.detachAnimationClip(
             requiredIpcString(animationId, 'Animation id'),
             requiredIpcString(clipId, 'Animation clip id'),
           ),
         ),
+    );
+    handleFromSettings(
+      'persona:settings-attach-animation-clip',
+      (animationId: unknown, clipId: unknown) =>
+        publishSettings(store.attachAnimationClip(
+          requiredIpcString(animationId, 'Animation id'),
+          requiredIpcString(clipId, 'Animation clip id'),
+        )),
+    );
+    handleFromSettings(
+      'persona:settings-attach-animation-clips',
+      (animationId: unknown, clipIds: unknown) => {
+        if (!Array.isArray(clipIds)) throw new Error('Animation clip ids are required.');
+        return publishSettings(store.attachAnimationClips(
+          requiredIpcString(animationId, 'Animation id'),
+          clipIds.map((clipId) => requiredIpcString(clipId, 'Animation clip id')),
+        ));
+      },
+    );
+    handleFromSettings(
+      'persona:settings-delete-animation-library-clip',
+      (clipId: unknown) => publishSettings(store.deleteAnimationLibraryClip(
+        requiredIpcString(clipId, 'Animation clip id'),
+      )),
+    );
+    handleFromSettings(
+      'persona:settings-export-animation-library-clip',
+      (clipId: unknown) => exportAnimationLibraryClip({
+        clipId: requiredIpcString(clipId, 'Animation clip id'),
+        selectDestination: selectAnimationClipExportDestination,
+        store,
+      }),
     );
     handleFromSettings(
       "persona:settings-reset-packaged-animations",
@@ -1482,6 +1596,43 @@ if (!app.requestSingleInstanceLock()) {
         settingsSnapshot: store.getSnapshot(),
       }),
     );
+    handleFromSettings('persona:settings-open-kimodo-repository', () =>
+      shell.openExternal(KIMODO_REPOSITORY_URL),
+    );
+    handleFromSettings('persona:settings-animation-generator-status', () => {
+      if (!animationGenerator) throw new Error('Animation generator is unavailable.');
+      return animationGenerator.getStatus();
+    });
+    handleFromSettings(
+      'persona:settings-animation-generator-set-config',
+      (config: unknown) => {
+        if (!animationGenerator) throw new Error('Animation generator is unavailable.');
+        return animationGenerator.setConfig(config);
+      },
+    );
+    handleFromSettings('persona:settings-animation-generator-check', () => {
+      if (!animationGenerator) throw new Error('Animation generator is unavailable.');
+      return animationGenerator.check();
+    });
+    handleFromSettings('persona:settings-animation-generator-start', (request: unknown) => {
+      if (!animationGenerator) throw new Error('Animation generator is unavailable.');
+      return animationGenerator.start(request, 'settings');
+    });
+    handleFromSettings('persona:settings-animation-generator-retry', (jobId: unknown) => {
+      if (!animationGenerator) throw new Error('Animation generator is unavailable.');
+      return animationGenerator.retry(requiredIpcString(jobId, 'Animation generation job id'));
+    });
+    handleFromSettings('persona:settings-animation-generator-discard', (jobId: unknown) => {
+      if (!animationGenerator) throw new Error('Animation generator is unavailable.');
+      return animationGenerator.discard(requiredIpcString(jobId, 'Animation generation job id'));
+    });
+    handleFromSettings('persona:settings-animation-generator-list', () =>
+      animationGenerator?.listJobs() ?? [],
+    );
+    handleFromSettings('persona:settings-animation-generator-clear', () => {
+      if (!animationGenerator) throw new Error('Animation generator is unavailable.');
+      return animationGenerator.clearJobs();
+    });
     handleFromSettings("persona:vroid-get-status", () => vroidHubStatus());
     handleFromSettings("persona:vroid-get-credentials", () => {
       if (!vroidHubSecureStorageAvailable()) {
@@ -1666,6 +1817,35 @@ if (!app.requestSingleInstanceLock()) {
         store
           .getSnapshot()
           .animations.filter((animation) => animation.asset_urls.length > 0),
+      getAnimationClips: () => store.getSnapshot().animation_clips,
+      onCreateAnimationAction: (metadata, clipIds) => {
+        if (!animationGenerator?.getStatus().config.mcp_enabled) {
+          throw new Error('Agent animation changes are disabled in Persona Settings.');
+        }
+        const snapshot = publishSettings(store.createAnimationWithClips(metadata, clipIds));
+        const action = snapshot.animations.find(
+          (candidate) => candidate.animation_name === metadata.animation_name,
+        );
+        if (!action) throw new Error('Persona could not find the newly created action.');
+        return action;
+      },
+      onAttachAnimationClip: (actionName, clipId) => {
+        if (!animationGenerator?.getStatus().config.mcp_enabled) {
+          throw new Error('Agent animation changes are disabled in Persona Settings.');
+        }
+        const action = store.getAnimation(actionName);
+        if (!action) throw new Error('Animation action is not installed.');
+        const snapshot = publishSettings(store.attachAnimationClip(action.id, clipId));
+        const updated = snapshot.animations.find((candidate) => candidate.id === action.id);
+        if (!updated) throw new Error('Persona could not find the updated action.');
+        return updated;
+      },
+      onGenerateAnimation: (request) => {
+        if (!animationGenerator) throw new Error('Animation generator is unavailable.');
+        return animationGenerator.start(request, 'mcp');
+      },
+      getAnimationGeneration: (jobId) =>
+        animationGenerator?.getJob(jobId) ?? null,
     });
     bridge = createBridgeServer({
       port: mcpServerPort,
@@ -1728,6 +1908,7 @@ app.on("before-quit", () => {
   isQuitting = true;
   clearHyprlandConfigurationTimer();
   audioListener?.stop();
+  animationGenerator?.close();
   globalShortcut.unregisterAll();
   void mcpHandler?.close();
   void bridge

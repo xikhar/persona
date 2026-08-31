@@ -76,7 +76,7 @@ export function DeveloperSection({
                 <h2>Developer settings</h2>
                 <p>
                   Experimental controls for tuning Persona's runtime
-                  behavior. Changes save automatically.
+                  behavior.
                 </p>
               </div>
               <button
@@ -99,7 +99,7 @@ export function DeveloperSection({
                 <p>
                   Tune speaking pause handling and the transition
                   profile used for speaking chunks and agent-triggered
-                  animations. Changes apply live.
+                  animations.
                 </p>
               </div>
             </div>

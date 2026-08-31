@@ -14,6 +14,7 @@ import type { VoiceSourceSettings } from './types.cjs';
 import type {
   CustomAnimationMetadata,
   PersonaAnimationClipSettings,
+  PersonaAnimationLibraryClip,
   PersonaAnimationSettings,
   PersonaAvatarWindowSize,
   PersonaLightingSettings,
@@ -47,6 +48,10 @@ interface StoredAnimationClip {
   id: string;
   stored_filename: string;
   clip_name: string;
+  source: 'imported' | 'kimodo';
+  created_at: string;
+  prompt: string | null;
+  generation_job_id: string | null;
 }
 
 interface SettingsState {
@@ -65,7 +70,8 @@ interface SettingsState {
   model_lighting: Record<string, ModelLighting>;
   models: StoredModel[];
   animations: StoredAnimation[];
-  animation_clips: Record<string, StoredAnimationClip[]>;
+  animation_clips: StoredAnimationClip[];
+  animation_clip_links: Record<string, string[]>;
   packaged_animation_overrides: Record<string, AnimationMetadata>;
   hidden_packaged_animation_ids: string[];
   voice_source: VoiceSourceSettings;
@@ -83,11 +89,21 @@ interface HubModel {
 }
 
 export interface SettingsStore {
+  assertCanAddAnimationClips(count?: number): void;
   addAnimationClips(animationId: string, filePaths: readonly string[]): SettingsSnapshot;
+  importAnimationClips(filePaths: readonly string[]): SettingsSnapshot;
+  addGeneratedAnimationClip(
+    filePath: string,
+    metadata: { clip_name: unknown; prompt: unknown; generation_job_id: unknown },
+  ): SettingsSnapshot;
+  attachAnimationClip(animationId: string, clipId: string): SettingsSnapshot;
+  attachAnimationClips(animationId: string, clipIds: readonly string[]): SettingsSnapshot;
   clearActiveHubModel(): SettingsSnapshot;
   createAnimation(metadata: unknown): SettingsSnapshot;
+  createAnimationWithClips(metadata: unknown, clipIds: readonly string[]): SettingsSnapshot;
   deleteAnimation(animationId: string): SettingsSnapshot;
-  deleteAnimationClip(animationId: string, clipId: string): SettingsSnapshot;
+  detachAnimationClip(animationId: string, clipId: string): SettingsSnapshot;
+  deleteAnimationLibraryClip(clipId: string): SettingsSnapshot;
   deleteModel(modelId: string): SettingsSnapshot;
   getAnimation(animationName: string): AvailableAnimation | null;
   getSnapshot(): SettingsSnapshot;
@@ -113,7 +129,7 @@ export interface SettingsStore {
   updateAnimation(animationId: string, metadata: unknown): SettingsSnapshot;
 }
 
-export const SETTINGS_SCHEMA_VERSION = 9;
+export const SETTINGS_SCHEMA_VERSION = 10;
 export const DEFAULT_PACKAGED_LIBRARY_PATH = path.join(
   __dirname,
   "..",
@@ -319,7 +335,8 @@ function defaultState(packagedLibrary: PackagedLibrary): SettingsState {
     model_lighting: {},
     models: [],
     animations: [],
-    animation_clips: {},
+    animation_clips: [],
+    animation_clip_links: {},
     packaged_animation_overrides: {},
     hidden_packaged_animation_ids: [],
     voice_source: { ...DEFAULT_VOICE_SOURCE },
@@ -546,7 +563,7 @@ function sanitizeUserAnimations(animations: unknown): StoredAnimation[] {
   });
 }
 
-function sanitizeAnimationClips(
+function sanitizeLegacyAnimationClips(
   animationClips: unknown,
   knownAnimationIds: ReadonlySet<string>,
 ): Record<string, StoredAnimationClip[]> {
@@ -559,7 +576,15 @@ function sanitizeAnimationClips(
       try {
         const clip_name = singleLine(clip.clip_name, "Clip name", 64).toLowerCase();
         if (!ANIMATION_NAME_PATTERN.test(clip_name)) return [];
-        return [{ id: clip.id, stored_filename: clip.stored_filename, clip_name }];
+        return [{
+          id: clip.id,
+          stored_filename: clip.stored_filename,
+          clip_name,
+          source: 'imported' as const,
+          created_at: new Date(0).toISOString(),
+          prompt: null,
+          generation_job_id: null,
+        }];
       } catch {
         return [];
       }
@@ -567,6 +592,63 @@ function sanitizeAnimationClips(
     if (valid.length > 0) sanitized[animationId] = valid;
   }
   return sanitized;
+}
+
+function migrateClipMap(
+  clipsByAnimation: Record<string, StoredAnimationClip[]>,
+): Pick<SettingsState, 'animation_clips' | 'animation_clip_links'> {
+  const clips = new Map<string, StoredAnimationClip>();
+  const links: Record<string, string[]> = {};
+  for (const [animationId, linkedClips] of Object.entries(clipsByAnimation)) {
+    for (const clip of linkedClips) clips.set(clip.id, clip);
+    const ids = [...new Set(linkedClips.map((clip) => clip.id))];
+    if (ids.length > 0) links[animationId] = ids;
+  }
+  return { animation_clips: [...clips.values()], animation_clip_links: links };
+}
+
+function sanitizeAnimationLibraryClips(value: unknown): StoredAnimationClip[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.flatMap((clip) => {
+    if (!validStoredAsset(clip, '.vrma') || seen.has(clip.id)) return [];
+    try {
+      const clip_name = singleLine(clip.clip_name, 'Clip name', 64).toLowerCase();
+      if (!ANIMATION_NAME_PATTERN.test(clip_name)) return [];
+      const created = typeof clip.created_at === 'string' && Number.isFinite(Date.parse(clip.created_at))
+        ? new Date(clip.created_at).toISOString()
+        : new Date(0).toISOString();
+      seen.add(clip.id);
+      return [{
+        id: clip.id,
+        stored_filename: clip.stored_filename,
+        clip_name,
+        source: clip.source === 'kimodo' ? 'kimodo' as const : 'imported' as const,
+        created_at: created,
+        prompt: typeof clip.prompt === 'string' && clip.prompt.trim() ? clip.prompt.trim().slice(0, 4096) : null,
+        generation_job_id: typeof clip.generation_job_id === 'string' ? clip.generation_job_id : null,
+      }];
+    } catch {
+      return [];
+    }
+  });
+}
+
+function sanitizeAnimationClipLinks(
+  value: unknown,
+  knownAnimationIds: ReadonlySet<string>,
+  knownClipIds: ReadonlySet<string>,
+): Record<string, string[]> {
+  if (!isRecord(value)) return {};
+  const links: Record<string, string[]> = {};
+  for (const [animationId, clipIds] of Object.entries(value)) {
+    if (!knownAnimationIds.has(animationId) || !Array.isArray(clipIds)) continue;
+    const valid = [...new Set(clipIds.filter(
+      (clipId): clipId is string => typeof clipId === 'string' && knownClipIds.has(clipId),
+    ))];
+    if (valid.length > 0) links[animationId] = valid;
+  }
+  return links;
 }
 
 function packagedUserLayers(
@@ -666,6 +748,10 @@ function migrateLegacyAnimations(
       id: animation.id,
       stored_filename: animation.stored_filename,
       clip_name: nextClipName(animationName, names),
+      source: 'imported',
+      created_at: new Date(0).toISOString(),
+      prompt: null,
+      generation_job_id: null,
     });
     animationClips[animationId] = clips;
   }
@@ -684,7 +770,7 @@ function safeReadState(
     const parsed = parsedValue;
     if (
       typeof parsed.schema_version !== 'number' ||
-      ![1, 2, 3, 4, 5, 6, 7, 8, SETTINGS_SCHEMA_VERSION].includes(
+      ![1, 2, 3, 4, 5, 6, 7, 8, 9, SETTINGS_SCHEMA_VERSION].includes(
         parsed.schema_version,
       )
     ) {
@@ -741,21 +827,22 @@ function safeReadState(
     };
 
     if (parsed.schema_version !== SETTINGS_SCHEMA_VERSION) {
-      if ([3, 4, 5, 6, 7, 8].includes(parsed.schema_version)) {
+      if ([3, 4, 5, 6, 7, 8, 9].includes(parsed.schema_version)) {
         const animations = sanitizeUserAnimations(parsed.animations);
         const knownAnimationIds = new Set([
           ...packagedLibrary.animations.map((animation) => animation.id),
           ...animations.map((animation) => animation.id),
         ]);
+        const migratedClips = migrateClipMap(sanitizeLegacyAnimationClips(
+          parsed.animation_clips,
+          knownAnimationIds,
+        ));
         return {
           migrated: true,
           state: {
             ...common,
             animations,
-            animation_clips: sanitizeAnimationClips(
-              parsed.animation_clips,
-              knownAnimationIds,
-            ),
+            ...migratedClips,
           },
         };
       }
@@ -768,7 +855,7 @@ function safeReadState(
         state: {
           ...common,
           animations: migrated.userAnimations,
-          animation_clips: migrated.animationClips,
+          ...migrateClipMap(migrated.animationClips),
         },
       };
     }
@@ -778,14 +865,17 @@ function safeReadState(
       ...packagedLibrary.animations.map((animation) => animation.id),
       ...animations.map((animation) => animation.id),
     ]);
+    const animationClips = sanitizeAnimationLibraryClips(parsed.animation_clips);
     return {
       migrated: false,
       state: {
         ...common,
         animations,
-        animation_clips: sanitizeAnimationClips(
-          parsed.animation_clips,
+        animation_clips: animationClips,
+        animation_clip_links: sanitizeAnimationClipLinks(
+          parsed.animation_clip_links,
           knownAnimationIds,
+          new Set(animationClips.map((clip) => clip.id)),
         ),
       },
     };
@@ -809,6 +899,7 @@ export function createSettingsStore({
   fs.mkdirSync(animationDirectory, { recursive: true });
   const initial = safeReadState(settingsPath, packagedLibrary);
   const state = initial.state;
+  let lastPersistedState = structuredClone(state);
   // A model fetched live from a linked account (e.g. VRoid Hub). Deliberately
   // kept out of `state`/settings.json: it never becomes an ordinary,
   // freely-reusable local file and disappears on restart by design.
@@ -822,13 +913,61 @@ export function createSettingsStore({
     state.schema_version = SETTINGS_SCHEMA_VERSION;
     fs.mkdirSync(userDataPath, { recursive: true });
     const temporaryPath = `${settingsPath}.tmp`;
-    fs.writeFileSync(temporaryPath, `${JSON.stringify(state, null, 2)}\n`, {
-      mode: 0o600,
-    });
-    fs.renameSync(temporaryPath, settingsPath);
+    let descriptor: number | null = null;
+    try {
+      descriptor = fs.openSync(temporaryPath, 'w', 0o600);
+      fs.writeFileSync(descriptor, `${JSON.stringify(state, null, 2)}\n`);
+      fs.fsyncSync(descriptor);
+      fs.closeSync(descriptor);
+      descriptor = null;
+      fs.renameSync(temporaryPath, settingsPath);
+      lastPersistedState = structuredClone(state);
+    } catch (error) {
+      if (descriptor != null) {
+        try { fs.closeSync(descriptor); } catch { /* Preserve the original state-write error. */ }
+      }
+      try { fs.rmSync(temporaryPath, { force: true }); } catch { /* A later state write reuses this exact path. */ }
+      Object.assign(state, structuredClone(lastPersistedState));
+      throw error;
+    }
   }
 
   if (initial.migrated) writeState();
+
+  function recoverStagedDeletions(
+    directory: string,
+    extension: '.vrm' | '.vrma',
+    retainedFilenames: ReadonlySet<string>,
+  ): void {
+    for (const entry of fs.readdirSync(directory)) {
+      if (!entry.endsWith(`${extension}.delete`)) continue;
+      const filename = entry.slice(0, -'.delete'.length);
+      if (!/^[0-9a-f-]+\.(?:vrm|vrma)$/iu.test(filename)) continue;
+      const stagedPath = path.join(directory, entry);
+      const targetPath = path.join(directory, filename);
+      try {
+        if (retainedFilenames.has(filename) && !fs.existsSync(targetPath)) {
+          fs.renameSync(stagedPath, targetPath);
+        } else {
+          fs.rmSync(stagedPath, { force: true });
+        }
+      } catch {
+        // Leave the recovery file in place. The same exact-target recovery is
+        // attempted again at the next startup.
+      }
+    }
+  }
+
+  recoverStagedDeletions(
+    modelDirectory,
+    '.vrm',
+    new Set(state.models.map((model) => model.stored_filename)),
+  );
+  recoverStagedDeletions(
+    animationDirectory,
+    '.vrma',
+    new Set(state.animation_clips.map((clip) => clip.stored_filename)),
+  );
 
   function userAssetUrl(
     kind: 'animation' | 'model',
@@ -885,8 +1024,10 @@ export function createSettingsStore({
   }
 
   function userClips(animationId: string): StoredAnimationClip[] {
-    return (state.animation_clips[animationId] ?? []).filter((clip) =>
-      fs.existsSync(path.join(animationDirectory, clip.stored_filename)),
+    const linked = new Set(state.animation_clip_links[animationId] ?? []);
+    return state.animation_clips.filter(
+      (clip) => linked.has(clip.id) &&
+        fs.existsSync(path.join(animationDirectory, clip.stored_filename)),
     );
   }
 
@@ -903,6 +1044,7 @@ export function createSettingsStore({
         id: `${animation.id}:packaged:${index + 1}`,
         animation_name: `${animationName}${index + 1}`,
         origin: "packaged",
+        source: "packaged",
         removable: false,
         asset_url: packagedAssetUrl(assetPath),
       }),
@@ -911,10 +1053,28 @@ export function createSettingsStore({
       id: clip.id,
       animation_name: clip.clip_name,
       origin: "user",
+      source: clip.source,
       removable: true,
       asset_url: userAssetUrl("animation", clip),
     }));
     return [...packagedClips, ...uploadedClips];
+  }
+
+  function availableAnimationLibraryClips(): PersonaAnimationLibraryClip[] {
+    return state.animation_clips
+      .filter((clip) => fs.existsSync(path.join(animationDirectory, clip.stored_filename)))
+      .map((clip) => ({
+        id: clip.id,
+        clip_name: clip.clip_name,
+        source: clip.source,
+        asset_url: userAssetUrl('animation', clip),
+        created_at: clip.created_at,
+        prompt: clip.prompt,
+        generation_job_id: clip.generation_job_id,
+        linked_action_ids: Object.entries(state.animation_clip_links)
+          .filter(([, clipIds]) => clipIds.includes(clip.id))
+          .map(([animationId]) => animationId),
+      }));
   }
 
   function availableAnimations(): AvailableAnimation[] {
@@ -1004,6 +1164,7 @@ export function createSettingsStore({
       packaged_animation_change_count: changedPackagedIds.size,
       models,
       animations: availableAnimations(),
+      animation_clips: availableAnimationLibraryClips(),
       model_lighting: sanitizeModelLighting(
         state.model_lighting,
         modelIds,
@@ -1054,11 +1215,32 @@ export function createSettingsStore({
     ) {
       state.default_model_id = id;
     }
-    writeState();
+    try {
+      writeState();
+    } catch (error) {
+      removeStoredFile(modelDirectory, stored_filename);
+      throw error;
+    }
     return getSnapshot();
   }
 
   function createAnimation(metadata: unknown): SettingsSnapshot {
+    return createAnimationWithClips(metadata, []);
+  }
+
+  function assertCanAddAnimationClips(count = 1): void {
+    if (!Number.isSafeInteger(count) || count < 1) {
+      throw new Error('Animation clip count must be a positive integer.');
+    }
+    if (state.animation_clips.length + count > MAX_CUSTOM_ANIMATION_CLIPS) {
+      throw new Error(`Persona supports up to ${MAX_CUSTOM_ANIMATION_CLIPS} animation clips.`);
+    }
+  }
+
+  function createAnimationWithClips(
+    metadata: unknown,
+    clipIds: readonly string[],
+  ): SettingsSnapshot {
     if (state.animations.length >= MAX_CUSTOM_ANIMATIONS) {
       throw new Error("Persona supports up to 100 custom animation actions.");
     }
@@ -1066,7 +1248,16 @@ export function createSettingsStore({
     if (animationNameTaken(normalized.animation_name)) {
       throw new Error("An animation action with this name already exists.");
     }
-    state.animations.push({ id: nodeCrypto.randomUUID(), ...normalized });
+    if (!Array.isArray(clipIds) || clipIds.some((clipId) => typeof clipId !== 'string')) {
+      throw new Error('Animation clip ids must be an array of strings.');
+    }
+    const linkedClipIds = [...new Set(clipIds)];
+    if (linkedClipIds.some((clipId) => !state.animation_clips.some((clip) => clip.id === clipId))) {
+      throw new Error('One or more animation clips are not in the reusable library.');
+    }
+    const id = nodeCrypto.randomUUID();
+    state.animations.push({ id, ...normalized });
+    if (linkedClipIds.length > 0) state.animation_clip_links[id] = linkedClipIds;
     writeState();
     return getSnapshot();
   }
@@ -1082,19 +1273,11 @@ export function createSettingsStore({
     if (!Array.isArray(filePaths) || filePaths.length === 0) {
       throw new Error("No VRMA files were selected.");
     }
-    const clipCount = Object.values(state.animation_clips).reduce(
-      (count, clips) => count + clips.length,
-      0,
-    );
-    if (clipCount + filePaths.length > MAX_CUSTOM_ANIMATION_CLIPS) {
-      throw new Error(
-        `Persona supports up to ${MAX_CUSTOM_ANIMATION_CLIPS} uploaded animation clips.`,
-      );
-    }
+    assertCanAddAnimationClips(filePaths.length);
     for (const filePath of filePaths) validateGlbFile(filePath, ".vrma");
 
     const existingNames = new Set(
-      animation.clips.map((clip) => clip.animation_name),
+      state.animation_clips.map((clip) => clip.clip_name),
     );
     const added: StoredAnimationClip[] = [];
     try {
@@ -1106,20 +1289,149 @@ export function createSettingsStore({
           id,
           stored_filename,
           clip_name: nextClipName(animation.animation_name, existingNames),
+          source: 'imported',
+          created_at: new Date().toISOString(),
+          prompt: null,
+          generation_job_id: null,
         });
       }
+      state.animation_clips.push(...added);
+      state.animation_clip_links[animationId] = [
+        ...(state.animation_clip_links[animationId] ?? []),
+        ...added.map((clip) => clip.id),
+      ];
+      writeState();
     } catch (error) {
       for (const clip of added) {
         removeStoredFile(animationDirectory, clip.stored_filename);
       }
       throw error;
     }
-    state.animation_clips[animationId] = [
-      ...(state.animation_clips[animationId] ?? []),
-      ...added,
-    ];
-    writeState();
     return getSnapshot();
+  }
+
+  function importAnimationClips(filePaths: readonly string[]): SettingsSnapshot {
+    if (!Array.isArray(filePaths) || filePaths.length === 0) {
+      throw new Error('No VRMA files were selected.');
+    }
+    assertCanAddAnimationClips(filePaths.length);
+    for (const filePath of filePaths) validateGlbFile(filePath, '.vrma');
+    const existingNames = new Set(state.animation_clips.map((clip) => clip.clip_name));
+    const added: StoredAnimationClip[] = [];
+    try {
+      for (const filePath of filePaths) {
+        const id = nodeCrypto.randomUUID();
+        const stored_filename = `${id}.vrma`;
+        fs.copyFileSync(filePath, path.join(animationDirectory, stored_filename));
+        const basename = path.basename(filePath, path.extname(filePath))
+          .toLowerCase()
+          .normalize('NFKD')
+          .replace(/[^a-z0-9]+/gu, '-')
+          .replace(/^-|-$/gu, '')
+          .slice(0, 58)
+          .replace(/-$/u, '') || 'imported-clip';
+        let clip_name = basename;
+        for (let index = 2; existingNames.has(clip_name); index += 1) {
+          const suffix = `-${index}`;
+          clip_name = `${basename.slice(0, 64 - suffix.length).replace(/-$/u, '')}${suffix}`;
+        }
+        existingNames.add(clip_name);
+        added.push({
+          id,
+          stored_filename,
+          clip_name,
+          source: 'imported',
+          created_at: new Date().toISOString(),
+          prompt: null,
+          generation_job_id: null,
+        });
+      }
+      state.animation_clips.push(...added);
+      writeState();
+    } catch (error) {
+      for (const clip of added) removeStoredFile(animationDirectory, clip.stored_filename);
+      throw error;
+    }
+    return getSnapshot();
+  }
+
+  function addGeneratedAnimationClip(
+    filePath: string,
+    metadata: { clip_name: unknown; prompt: unknown; generation_job_id: unknown },
+  ): SettingsSnapshot {
+    assertCanAddAnimationClips();
+    validateGlbFile(filePath, '.vrma');
+    const requestedName = singleLine(metadata.clip_name, 'Clip name', 64).toLowerCase();
+    if (!ANIMATION_NAME_PATTERN.test(requestedName)) {
+      throw new Error('Clip name must use lowercase letters, numbers, and single hyphens.');
+    }
+    const existingNames = new Set(state.animation_clips.map((clip) => clip.clip_name));
+    let clipName = requestedName;
+    for (let index = 2; existingNames.has(clipName); index += 1) {
+      const suffix = `-${index}`;
+      clipName = `${requestedName.slice(0, 64 - suffix.length).replace(/-$/u, '')}${suffix}`;
+    }
+    const prompt = typeof metadata.prompt === 'string' ? metadata.prompt.trim() : '';
+    if (!prompt || Buffer.byteLength(prompt, 'utf8') > 4096) {
+      throw new Error('Generation prompt must be between 1 and 4096 UTF-8 bytes.');
+    }
+    const generationJobId = singleLine(metadata.generation_job_id, 'Generation job id', 128);
+    const id = nodeCrypto.randomUUID();
+    const stored_filename = `${id}.vrma`;
+    fs.copyFileSync(filePath, path.join(animationDirectory, stored_filename));
+    state.animation_clips.push({
+      id,
+      stored_filename,
+      clip_name: clipName,
+      source: 'kimodo',
+      created_at: new Date().toISOString(),
+      prompt,
+      generation_job_id: generationJobId,
+    });
+    try {
+      writeState();
+    } catch (error) {
+      removeStoredFile(animationDirectory, stored_filename);
+      throw error;
+    }
+    return getSnapshot();
+  }
+
+  function attachAnimationClips(
+    animationId: string,
+    clipIds: readonly string[],
+  ): SettingsSnapshot {
+    if (!availableAnimations().some((animation) => animation.id === animationId)) {
+      throw new Error('Animation action is not installed.');
+    }
+    const uniqueClipIds = [...new Set(clipIds)];
+    if (uniqueClipIds.length === 0) {
+      throw new Error('Choose at least one animation clip.');
+    }
+    const libraryIds = new Set(state.animation_clips.map((clip) => clip.id));
+    if (uniqueClipIds.some((clipId) => !libraryIds.has(clipId))) {
+      throw new Error('Animation clip is not in the reusable library.');
+    }
+    const previousLinks = state.animation_clip_links[animationId];
+    const links = previousLinks ?? [];
+    const nextLinks = [...links];
+    for (const clipId of uniqueClipIds) {
+      if (!nextLinks.includes(clipId)) nextLinks.push(clipId);
+    }
+    if (nextLinks.length === links.length) return getSnapshot();
+    state.animation_clip_links[animationId] = nextLinks;
+    try {
+      writeState();
+    } catch (error) {
+      if (previousLinks) state.animation_clip_links[animationId] = previousLinks;
+      else delete state.animation_clip_links[animationId];
+      throw error;
+    }
+    return getSnapshot();
+  }
+
+  function attachAnimationClip(animationId: string, clipId: string): SettingsSnapshot {
+    return attachAnimationClips(animationId, [clipId]);
   }
 
   function updateAnimation(
@@ -1154,11 +1466,6 @@ export function createSettingsStore({
       } else {
         state.packaged_animation_overrides[animationId] = normalized;
       }
-      (state.animation_clips[animationId] ?? []).forEach((clip, index) => {
-        clip.clip_name = `${normalized.animation_name}${
-          packaged.asset_paths.length + index + 1
-        }`;
-      });
       writeState();
       return getSnapshot();
     }
@@ -1168,9 +1475,6 @@ export function createSettingsStore({
     );
     if (!userAnimation) throw new Error("Animation action is not installed.");
     Object.assign(userAnimation, normalized);
-    (state.animation_clips[animationId] ?? []).forEach((clip, index) => {
-      clip.clip_name = `${normalized.animation_name}${index + 1}`;
-    });
     writeState();
     return getSnapshot();
   }
@@ -1180,18 +1484,77 @@ export function createSettingsStore({
     if (fs.existsSync(target)) fs.unlinkSync(target);
   }
 
-  function deleteAnimationClip(
+  function stageStoredFileDeletion(
+    directory: string,
+    filename: string,
+  ): { stagedPath: string; targetPath: string } | null {
+    const targetPath = path.join(directory, filename);
+    if (!fs.existsSync(targetPath)) return null;
+    const stagedPath = `${targetPath}.delete`;
+    if (fs.existsSync(stagedPath)) {
+      throw new Error('A previous asset deletion is still awaiting recovery. Restart Persona and try again.');
+    }
+    fs.renameSync(targetPath, stagedPath);
+    return { stagedPath, targetPath };
+  }
+
+  function restoreStagedFile(
+    staged: { stagedPath: string; targetPath: string } | null,
+  ): void {
+    if (staged && fs.existsSync(staged.stagedPath) && !fs.existsSync(staged.targetPath)) {
+      try {
+        fs.renameSync(staged.stagedPath, staged.targetPath);
+      } catch {
+        // The file remains in its deterministic .delete recovery location and
+        // is restored from the persisted state on the next startup.
+      }
+    }
+  }
+
+  function finishStagedDeletion(
+    staged: { stagedPath: string; targetPath: string } | null,
+  ): void {
+    if (!staged) return;
+    try {
+      fs.rmSync(staged.stagedPath, { force: true });
+    } catch {
+      // The state no longer references this file. Startup cleanup retries the
+      // exact staged path without risking a user-owned asset.
+    }
+  }
+
+  function detachAnimationClip(
     animationId: string,
     clipId: string,
   ): SettingsSnapshot {
-    const clips = state.animation_clips[animationId] ?? [];
-    const index = clips.findIndex((clip) => clip.id === clipId);
-    if (index === -1) throw new Error("Uploaded animation clip was not found.");
-    const [removed] = clips.splice(index, 1);
-    if (!removed) throw new Error('Uploaded animation clip was not found.');
-    removeStoredFile(animationDirectory, removed.stored_filename);
-    if (clips.length === 0) delete state.animation_clips[animationId];
+    const links = state.animation_clip_links[animationId] ?? [];
+    if (!links.includes(clipId)) throw new Error('Animation clip is not linked to this action.');
+    const remaining = links.filter((id) => id !== clipId);
+    if (remaining.length > 0) state.animation_clip_links[animationId] = remaining;
+    else delete state.animation_clip_links[animationId];
     writeState();
+    return getSnapshot();
+  }
+
+  function deleteAnimationLibraryClip(clipId: string): SettingsSnapshot {
+    const index = state.animation_clips.findIndex((clip) => clip.id === clipId);
+    if (index === -1) throw new Error('Animation clip was not found.');
+    const removed = state.animation_clips[index];
+    if (!removed) throw new Error('Animation clip was not found.');
+    const staged = stageStoredFileDeletion(animationDirectory, removed.stored_filename);
+    state.animation_clips.splice(index, 1);
+    for (const [animationId, links] of Object.entries(state.animation_clip_links)) {
+      const remaining = links.filter((id) => id !== clipId);
+      if (remaining.length > 0) state.animation_clip_links[animationId] = remaining;
+      else delete state.animation_clip_links[animationId];
+    }
+    try {
+      writeState();
+    } catch (error) {
+      restoreStagedFile(staged);
+      throw error;
+    }
+    finishStagedDeletion(staged);
     return getSnapshot();
   }
 
@@ -1207,6 +1570,7 @@ export function createSettingsStore({
         state.hidden_packaged_animation_ids.push(animationId);
       }
       delete state.packaged_animation_overrides[animationId];
+      delete state.animation_clip_links[animationId];
       writeState();
       return getSnapshot();
     }
@@ -1216,10 +1580,7 @@ export function createSettingsStore({
     );
     if (index === -1) throw new Error("Animation action is not installed.");
     state.animations.splice(index, 1);
-    for (const clip of state.animation_clips[animationId] ?? []) {
-      removeStoredFile(animationDirectory, clip.stored_filename);
-    }
-    delete state.animation_clips[animationId];
+    delete state.animation_clip_links[animationId];
     writeState();
     return getSnapshot();
   }
@@ -1227,13 +1588,6 @@ export function createSettingsStore({
   function resetPackagedAnimations(): SettingsSnapshot {
     state.packaged_animation_overrides = {};
     state.hidden_packaged_animation_ids = [];
-    for (const animation of packagedLibrary.animations) {
-      (state.animation_clips[animation.id] ?? []).forEach((clip, index) => {
-        clip.clip_name = `${animation.animation_name}${
-          animation.asset_paths.length + index + 1
-        }`;
-      });
-    }
     writeState();
     return getSnapshot();
   }
@@ -1243,15 +1597,22 @@ export function createSettingsStore({
     if (index === -1) {
       throw new Error("Packaged models cannot be deleted.");
     }
-    const [removed] = state.models.splice(index, 1);
+    const removed = state.models[index];
     if (!removed) throw new Error('Custom model was not found.');
-    removeStoredFile(modelDirectory, removed.stored_filename);
+    const staged = stageStoredFileDeletion(modelDirectory, removed.stored_filename);
+    state.models.splice(index, 1);
     if (state.default_model_id === modelId) {
       state.default_model_id =
         packagedLibrary.default_model_id ?? state.models[0]?.id ?? null;
     }
     delete state.model_lighting[modelId];
-    writeState();
+    try {
+      writeState();
+    } catch (error) {
+      restoreStagedFile(staged);
+      throw error;
+    }
+    finishStagedDeletion(staged);
     return getSnapshot();
   }
 
@@ -1557,9 +1918,9 @@ export function createSettingsStore({
       return fs.existsSync(resolved) ? resolved : null;
     }
     if (kind === "animation") {
-      const record = Object.values(state.animation_clips)
-        .flat()
-        .find((clip) => `${clip.id}.vrma` === requestedFilename);
+      const record = state.animation_clips.find(
+        (clip) => `${clip.id}.vrma` === requestedFilename,
+      );
       if (!record) return null;
       const resolved = path.join(animationDirectory, record.stored_filename);
       return fs.existsSync(resolved) ? resolved : null;
@@ -1572,11 +1933,18 @@ export function createSettingsStore({
   }
 
   return {
+    assertCanAddAnimationClips,
     addAnimationClips,
+    importAnimationClips,
+    addGeneratedAnimationClip,
+    attachAnimationClip,
+    attachAnimationClips,
     clearActiveHubModel,
     createAnimation,
+    createAnimationWithClips,
     deleteAnimation,
-    deleteAnimationClip,
+    detachAnimationClip,
+    deleteAnimationLibraryClip,
     deleteModel,
     getAnimation,
     getSnapshot,

@@ -10,6 +10,7 @@ import {
 const ALL_SECTIONS: SettingsSection[] = [
   'models',
   'animations',
+  'kimodo',
   'appearance',
   'voice',
   'mcp',
@@ -59,7 +60,8 @@ const FACTS: SectionSummaryFacts = {
   characterSize: 1,
   clipCount: 18,
   developerEnabled: false,
-  mcp: { playableActions: 2, tools: 4 },
+  generatedClipCount: 4,
+  mcp: { playableActions: 2, tools: 9 },
   modelCount: 3,
   playableActionCount: 2,
   voiceHeading: 'Automatic detection',
@@ -69,9 +71,10 @@ describe('sectionSummary', () => {
   it('answers the question each section is actually about', () => {
     expect(sectionSummary('models', FACTS)).toBe('3 models');
     expect(sectionSummary('animations', FACTS)).toBe('2 actions · 18 clips');
+    expect(sectionSummary('kimodo', FACTS)).toBe('4 generated clips');
     expect(sectionSummary('appearance', FACTS)).toBe('100% · 430×680');
     expect(sectionSummary('voice', FACTS)).toBe('Automatic detection');
-    expect(sectionSummary('mcp', FACTS)).toBe('4 tools · 2 playable actions');
+    expect(sectionSummary('mcp', FACTS)).toBe('9 tools · 2 playable actions');
     expect(sectionSummary('developer', FACTS)).toBe(
       'Developer settings locked',
     );

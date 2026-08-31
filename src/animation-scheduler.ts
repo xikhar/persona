@@ -9,10 +9,12 @@ import {
 } from './animation-motion';
 
 const WEIGHT_EPSILON = 0.0001;
+const TRANSITION_TIME_EPSILON = 1e-9;
 const MAX_SEQUENCE_TRANSITION_FRACTION = 0.45;
 const MINIMUM_FULL_WEIGHT_FRACTION = 0.1;
 
 export type AnimationPlayback = 'loop' | 'once';
+export type AnimationTransition = 'smooth' | 'immediate';
 
 export const DEFAULT_BODY_TRANSITION_MS = 700;
 export const DEFAULT_SPEAKING_DEBOUNCE_MS = 350;
@@ -38,6 +40,8 @@ export interface AnimationScheduleRequest {
   // callback has to clear the previous one rather than leave it to fire.
   onComplete?: (() => void) | undefined;
   playback: AnimationPlayback;
+  /** Exact previews use the authored first frame without blending from Idle. */
+  transition?: AnimationTransition;
   type: PlayableAnimationType;
 }
 
@@ -69,6 +73,8 @@ interface TransitionTiming {
 interface ActionRecord {
   action: THREE.AnimationAction;
   clip: THREE.AnimationClip;
+  /** A smooth one-shot entry holds frame zero until its blend is complete. */
+  entryHeld: boolean;
   id: number;
   url: string;
 }
@@ -83,6 +89,7 @@ interface NormalizedRequest extends AnimationScheduleRequest {
   epoch: number;
   fallbackAnimationUrls: string[];
   key: string;
+  transition: AnimationTransition;
 }
 
 interface ActiveAction {
@@ -228,6 +235,7 @@ function requestKey(request: AnimationScheduleRequest): string {
     request.animationRequest,
     request.type,
     request.playback,
+    request.transition ?? 'smooth',
     uniqueUrls(request.animationUrls),
     uniqueUrls(request.fallbackAnimationUrls),
   ]);
@@ -402,6 +410,7 @@ export class AnimationScheduler {
       epoch,
       fallbackAnimationUrls: uniqueUrls(request.fallbackAnimationUrls),
       key,
+      transition: request.transition ?? 'smooth',
     };
     this.desired = normalized;
     this.sequencePlan = null;
@@ -491,7 +500,7 @@ export class AnimationScheduler {
       this.log('request-empty', { type: normalized.type });
       this.startTransition(
         null,
-        this.transitionTiming(previousType, normalized.type),
+        this.requestTransitionTiming(previousType, normalized),
         'empty-request',
       );
       if (normalized.playback === 'once') normalized.onComplete?.();
@@ -519,14 +528,14 @@ export class AnimationScheduler {
       target,
       target.type === 'TALK'
         ? fitTransitionTiming(
-            this.transitionTiming(previousType, normalized.type),
+            this.requestTransitionTiming(previousType, normalized),
             Math.max(
               0,
               (target.record.clip.duration - target.startTime) *
                 MAX_SEQUENCE_TRANSITION_FRACTION,
             ),
           )
-        : this.transitionTiming(previousType, normalized.type),
+        : this.requestTransitionTiming(previousType, normalized),
       selection.fallback ? 'fallback-request' : 'request',
     );
 
@@ -551,7 +560,27 @@ export class AnimationScheduler {
 
   update(delta: number): void {
     if (this.disposed) return;
-    this.mixer.update(delta);
+    let remainingDelta = delta;
+    const heldTransition = this.transition;
+    if (
+      remainingDelta > 0 &&
+      heldTransition?.target?.record.entryHeld
+    ) {
+      const releaseAt = heldTransition.startedAt + heldTransition.total;
+      const heldDelta = Math.min(
+        remainingDelta,
+        Math.max(0, releaseAt - this.mixer.time),
+      );
+      if (heldDelta > 0) this.mixer.update(heldDelta);
+      remainingDelta -= heldDelta;
+      if (Math.abs(remainingDelta) <= TRANSITION_TIME_EPSILON) {
+        remainingDelta = 0;
+      }
+      // Release at the exact transition boundary before consuming any excess
+      // delta, so a slow render frame cannot hide the first authored samples.
+      this.applyTransition();
+    }
+    if (remainingDelta !== 0) this.mixer.update(remainingDelta);
     this.applyTransition();
     this.updateSpeakingDebounce();
     this.updateIdleInterim();
@@ -650,6 +679,15 @@ export class AnimationScheduler {
       );
     }
     return bodyTransitionTiming(this.timing.bodyTransitionMs);
+  }
+
+  private requestTransitionTiming(
+    previousType: PlayableAnimationType | null,
+    request: Pick<NormalizedRequest, 'transition' | 'type'>,
+  ): TransitionTiming {
+    return request.transition === 'immediate'
+      ? { entry: 0, exit: 0, total: 0 }
+      : this.transitionTiming(previousType, request.type);
   }
 
   private async selectTarget(
@@ -851,6 +889,7 @@ export class AnimationScheduler {
     return {
       action: this.mixer.clipAction(clip),
       clip,
+      entryHeld: false,
       id: this.nextActionId++,
       url: loaded.url,
     };
@@ -909,7 +948,7 @@ export class AnimationScheduler {
       action.clampWhenFinished = false;
     }
     action.enabled = true;
-    action.setEffectiveTimeScale(1);
+    action.setEffectiveTimeScale(target.record.entryHeld ? 0 : 1);
     action.play();
   }
 
@@ -944,10 +983,16 @@ export class AnimationScheduler {
     const sources = this.captureWeights();
     const replacing = this.transition != null;
     for (const record of sources.keys()) {
-      record.action.setEffectiveTimeScale(1);
+      record.action.setEffectiveTimeScale(record.entryHeld ? 0 : 1);
     }
     const targetWeight = target ? (sources.get(target.record) ?? 0) : 0;
     if (target) {
+      target.record.entryHeld = target.record.entryHeld || (
+        targetWeight <= WEIGHT_EPSILON &&
+        target.playback === 'once' &&
+        target.type !== 'TALK' &&
+        timing.total > Number.EPSILON
+      );
       this.configureAction(target, targetWeight > WEIGHT_EPSILON);
       this.contributing.add(target.record);
       target.record.action.setEffectiveWeight(targetWeight);
@@ -980,6 +1025,7 @@ export class AnimationScheduler {
         weight,
       })),
       reason,
+      targetEntryHeld: target?.record.entryHeld ?? false,
       targetActionId: target?.record.id ?? null,
       to: target?.record.url ?? 'rest-pose',
     });
@@ -989,10 +1035,12 @@ export class AnimationScheduler {
   private applyTransition(): void {
     const transition = this.transition;
     if (!transition) return;
-    const progress = transitionProgress(
-      this.mixer.time - transition.startedAt,
-      transition,
-    );
+    const elapsed = this.mixer.time - transition.startedAt;
+    // Decimal frame deltas do not always sum to the exact binary value used by
+    // the transition boundary. Treat a sub-nanosecond remainder as complete so
+    // a held one-shot cannot remain paused for an extra rendered frame.
+    const complete = elapsed + TRANSITION_TIME_EPSILON >= transition.total;
+    const progress = complete ? 1 : transitionProgress(elapsed, transition);
     const targetRecord = transition.target?.record ?? null;
     const targetStart = targetRecord
       ? (transition.sources.get(targetRecord) ?? 0)
@@ -1006,7 +1054,7 @@ export class AnimationScheduler {
         targetStart + (1 - targetStart) * progress,
       );
     }
-    if (progress < 1) return;
+    if (!complete) return;
 
     for (const record of this.contributing) {
       if (record === targetRecord) continue;
@@ -1014,9 +1062,17 @@ export class AnimationScheduler {
     }
     this.contributing.clear();
     if (targetRecord) {
+      const releasedEntry = targetRecord.entryHeld;
+      targetRecord.entryHeld = false;
       targetRecord.action.setEffectiveTimeScale(1);
       targetRecord.action.setEffectiveWeight(1);
       this.contributing.add(targetRecord);
+      if (releasedEntry) {
+        this.log('one-shot-entry-released', {
+          actionId: targetRecord.id,
+          url: targetRecord.url,
+        });
+      }
     }
     this.transition = null;
     this.log('transition-complete', {

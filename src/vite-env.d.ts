@@ -15,12 +15,17 @@ declare global {
   type PersonaModelSettings = PersonaApi.PersonaModelSettings;
   type PersonaAnimationSettings = PersonaApi.PersonaAnimationSettings;
   type PersonaAnimationClipSettings = PersonaApi.PersonaAnimationClipSettings;
+  type PersonaAnimationLibraryClip = PersonaApi.PersonaAnimationLibraryClip;
   type PersonaVoiceSourceSettings = PersonaApi.PersonaVoiceSourceSettings;
   type PersonaVoiceSource = PersonaApi.PersonaVoiceSource;
   type PersonaVoiceSourceCatalog = PersonaApi.PersonaVoiceSourceCatalog;
   type PersonaAvatarWindowSize = PersonaApi.PersonaAvatarWindowSize;
   type PersonaSettingsSnapshot = PersonaApi.PersonaSettingsSnapshot;
   type PersonaMcpStatus = PersonaApi.PersonaMcpStatus;
+  type PersonaAnimationGeneratorConfig = PersonaApi.PersonaAnimationGeneratorConfig;
+  type PersonaAnimationGeneratorStatus = PersonaApi.PersonaAnimationGeneratorStatus;
+  type PersonaAnimationGenerationJob = PersonaApi.PersonaAnimationGenerationJob;
+  type PersonaAnimationGenerationRequest = PersonaApi.PersonaAnimationGenerationRequest;
   type CustomAnimationMetadata = PersonaApi.CustomAnimationMetadata;
   type PersonaVroidHubStatus = PersonaApi.PersonaVroidHubStatus;
   type PersonaVroidHubCredentials = PersonaApi.PersonaVroidHubCredentials;

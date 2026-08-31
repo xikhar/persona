@@ -57,11 +57,22 @@ Treat signed and notarized artifacts as the production release path.
    - ending voice leaves the window open;
    - tray show, hide, recenter, preview, and quit;
    - packaged and user model selection;
-   - user model and action creation, multi-file VRMA import, preview,
-     persistence, clip deletion, and action deletion;
-   - permanent empty Idle and Speaking slots and numbered clip names;
+   - user model and action creation plus reusable-library VRMA import, card
+     preview, download, persistence, and deletion;
+   - multi-select **Add clip**, linking one clip to multiple actions, detaching
+     without deleting the file, and removing a library clip from every action;
+   - permanent empty Idle and Speaking slots and packaged/user clip cards;
    - packaged action edit, removal, and reset without changing user uploads;
    - random clip selection for voice-driven and MCP-triggered actions;
+   - Kimodo disabled, unavailable, ready, normal generation, restart while
+     polling, conversion/install retry, per-job discard, and history clearing;
+   - Kimodo clip capacity and low-storage preflight before provider submission;
+   - generated-job errors never showing provider bodies, commands, credentials,
+     or local filesystem paths;
+   - Kimodo MCP opt-in off by default, asynchronous generation/status polling,
+     explicit action creation/linking, and no duplicate clip after recovery;
+   - immediate Settings preview and smooth scheduled playback both completing
+     without a skipped first frame or root-position jump;
    - shortcut, URL protocol, zoom, orbit, and pan;
    - secondary motion on window drag and orbit, settling back to rest;
    - transparent background and always-on-top behavior;
@@ -92,4 +103,6 @@ The release workflow:
 6. writes `SHA256SUMS.txt`; and
 7. publishes one GitHub Release with generated notes.
 
-The current test placeholders intentionally make step 1 fail.
+The release asset gate expects the checkout's VRM/VRMA files to match the
+manifest exactly. Ignored local development media deliberately make that gate
+fail; run it from a clean release checkout.

@@ -87,7 +87,13 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
     'enableDeveloperSettings', 'resetDeveloperSettings',
     'setVroidHubPlaintextStorageAllowed', 'setVoiceSource',
     'listVoiceSources', 'setModelLighting', 'resetModelLighting',
-    'getMcpStatus', 'setWindowTheme', 'subscribe',
+    'getMcpStatus', 'openKimodoRepository', 'setWindowTheme', 'subscribe',
+    'attachAnimationClip', 'attachAnimationClips', 'detachAnimationClip',
+    'deleteAnimationLibraryClip', 'exportAnimationLibraryClip', 'importAnimationClips',
+    'createAnimationWithClips', 'clearAnimationGenerations',
+    'getAnimationGeneratorStatus', 'setAnimationGeneratorConfig',
+    'checkAnimationGenerator', 'generateAnimation', 'listAnimationGenerations',
+    'retryAnimationGeneration', 'discardAnimationGeneration',
   ] as const);
   const vroidHub = requiredApi(exposed, 'personaVroidHub', [
     'getStatus', 'getCredentials', 'setCredentials', 'clearCredentials',
@@ -111,7 +117,17 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
     animation_description: "A friendly wave.",
     animation_trigger_scenario: "Use for greetings.",
   });
+  await settings.createAnimationWithClips({
+    animation_name: 'wave-with-clip',
+    animation_description: 'A linked wave.',
+    animation_trigger_scenario: 'Use for linked greetings.',
+  }, ['clip-id']);
   await settings.addAnimationClips("animation-id");
+  await settings.importAnimationClips();
+  await settings.attachAnimationClip("animation-id", "clip-id");
+  await settings.attachAnimationClips("animation-id", ["clip-id", "clip-id-2"]);
+  await settings.detachAnimationClip("animation-id", "clip-id");
+  await settings.deleteAnimationLibraryClip("clip-id");
   await settings.updateAnimation("animation-id", {
     animation_name: "wave-hello",
     animation_description: "An updated friendly wave.",
@@ -147,6 +163,21 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
   });
   await settings.resetModelLighting("model-id");
   await settings.getMcpStatus();
+  await settings.openKimodoRepository();
+  await settings.exportAnimationLibraryClip('clip-id');
+  await settings.getAnimationGeneratorStatus();
+  await settings.setAnimationGeneratorConfig({
+    enabled: true,
+    server_url: 'http://127.0.0.1:8090',
+    model: 'soma-rp-v1.1',
+    mcp_enabled: false,
+  });
+  await settings.checkAnimationGenerator();
+  await settings.generateAnimation({ prompt: 'Wave' });
+  await settings.listAnimationGenerations();
+  await settings.retryAnimationGeneration('job-id');
+  await settings.discardAnimationGeneration('job-id');
+  await settings.clearAnimationGenerations();
   settings.setWindowTheme("light");
   await vroidHub.getStatus();
   await vroidHub.getCredentials();
@@ -172,7 +203,21 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
         animation_trigger_scenario: "Use for greetings.",
       },
     ],
+    [
+      'persona:settings-create-animation-with-clips',
+      {
+        animation_name: 'wave-with-clip',
+        animation_description: 'A linked wave.',
+        animation_trigger_scenario: 'Use for linked greetings.',
+      },
+      ['clip-id'],
+    ],
     ["persona:settings-add-animation-clips", "animation-id"],
+    ["persona:settings-import-animation-clips"],
+    ["persona:settings-attach-animation-clip", "animation-id", "clip-id"],
+    ["persona:settings-attach-animation-clips", "animation-id", ["clip-id", "clip-id-2"]],
+    ["persona:settings-delete-animation-clip", "animation-id", "clip-id"],
+    ["persona:settings-delete-animation-library-clip", "clip-id"],
     [
       "persona:settings-update-animation",
       "animation-id",
@@ -220,6 +265,24 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
     ],
     ["persona:settings-reset-model-lighting", "model-id"],
     ["persona:settings-get-mcp-status"],
+    ["persona:settings-open-kimodo-repository"],
+    ["persona:settings-export-animation-library-clip", "clip-id"],
+    ["persona:settings-animation-generator-status"],
+    [
+      "persona:settings-animation-generator-set-config",
+      {
+        enabled: true,
+        server_url: 'http://127.0.0.1:8090',
+        model: 'soma-rp-v1.1',
+        mcp_enabled: false,
+      },
+    ],
+    ["persona:settings-animation-generator-check"],
+    ["persona:settings-animation-generator-start", { prompt: 'Wave' }],
+    ["persona:settings-animation-generator-list"],
+    ["persona:settings-animation-generator-retry", "job-id"],
+    ["persona:settings-animation-generator-discard", "job-id"],
+    ["persona:settings-animation-generator-clear"],
     ["persona:vroid-get-status"],
     ["persona:vroid-get-credentials"],
     ["persona:vroid-set-credentials", "client-id", "client-secret"],
@@ -265,4 +328,40 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
   unsubscribeVroid();
   assert.deepEqual(statuses, [{ configured: true, connected: true }]);
   assert.equal(statusListeners.size, 0);
+});
+
+test('preload retains startup animation events until the avatar subscribes', () => {
+  const { exposed, listeners } = loadPreload();
+  const bridge = requiredApi(exposed, 'personaBridge', ['subscribe'] as const);
+  const eventListeners = listeners.get('persona:event');
+  assert.ok(eventListeners);
+  const preloadListener = [...eventListeners][0];
+  assert.ok(preloadListener);
+  const first = {
+    type: 'animation',
+    animation: 'CUSTOM',
+    animationName: 'wave',
+    animationUrls: ['persona-asset://animation/wave.vrma'],
+    expressionName: null,
+    expressionWeight: 1,
+    source: 'command',
+    requestId: 1,
+  };
+  const second = { ...first, requestId: 2 };
+  const received: unknown[] = [];
+
+  preloadListener({}, first);
+  const unsubscribe = bridge.subscribe((event: unknown) => received.push(event));
+  assert.equal(typeof unsubscribe, 'function');
+  assert.deepEqual(received, [first]);
+
+  preloadListener({}, second);
+  assert.deepEqual(received, [first, second]);
+  (unsubscribe as () => void)();
+
+  const third = { ...first, requestId: 3 };
+  preloadListener({}, third);
+  const receivedAfterRemount: unknown[] = [];
+  bridge.subscribe((event: unknown) => receivedAfterRemount.push(event));
+  assert.deepEqual(receivedAfterRemount, [third]);
 });

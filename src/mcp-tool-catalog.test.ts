@@ -7,8 +7,13 @@ describe('MCP tool catalog', () => {
     // only shown before the live catalog arrives, so a drift here means the
     // section briefly advertises a tool Persona does not have.
     expect([...MCP_TOOL_NAMES].sort()).toEqual([
+      'attach_animation_clip',
       'control_window',
+      'create_animation_action',
+      'generate_animation',
+      'get_animation_generation',
       'get_status',
+      'list_animation_clips',
       'list_animations',
       'play_animation',
     ]);

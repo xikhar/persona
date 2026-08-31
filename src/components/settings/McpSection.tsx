@@ -151,7 +151,7 @@ export function McpSection({
             </p>
           </div>
           <span className="chip">
-            {mcpStatus?.tools.length ?? 4} tools
+            {mcpStatus?.tools.length ?? MCP_TOOL_NAMES.length} tools
           </span>
         </div>
         <div className="mcp-tool-list">

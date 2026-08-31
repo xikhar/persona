@@ -24,6 +24,7 @@ import {
   animationUrlSignature,
   type PlayableAnimationType,
 } from '../animation-catalog';
+import type { AnimationTransition } from '../animation-scheduler';
 import {
   advanceExcitement,
   advanceGaze,
@@ -142,6 +143,7 @@ function readGazeRig(vrm: {
 interface AvatarProps {
   animation: PlayableAnimationType;
   animationRequest: number;
+  animationTransition?: AnimationTransition;
   animationUrls?: readonly string[];
   fallbackAnimationUrls?: readonly string[];
   preloadAnimationUrls?: readonly string[];
@@ -172,6 +174,7 @@ interface AvatarProps {
 function AvatarModel({
   animation,
   animationRequest,
+  animationTransition,
   animationUrls,
   fallbackAnimationUrls,
   preloadAnimationUrls,
@@ -239,10 +242,12 @@ function AvatarModel({
       fallbackAnimationUrls: stableFallbackAnimationUrls,
       onComplete: onAnimationComplete,
       playback,
+      ...(animationTransition ? { transition: animationTransition } : {}),
     });
   }, [
     animation,
     animationRequest,
+    animationTransition,
     onAnimationComplete,
     play,
     playback,

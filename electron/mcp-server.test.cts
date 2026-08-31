@@ -134,8 +134,13 @@ test("Persona MCP exposes and executes the local character tools", async (contex
     [
       "play_animation",
       "list_animations",
+      "list_animation_clips",
+      "create_animation_action",
+      "attach_animation_clip",
       "control_window",
       "get_status",
+      "generate_animation",
+      "get_animation_generation",
     ],
   );
   assert.equal(client.getInstructions(), SERVER_INSTRUCTIONS);
@@ -178,6 +183,152 @@ test("Persona MCP exposes and executes the local character tools", async (contex
     voiceState,
     listener,
   });
+});
+
+test('Persona MCP starts and reads an opted-in asynchronous animation generation', async (context) => {
+  const clipId = '123e4567-e89b-42d3-a456-426614174001';
+  const job = {
+    id: '123e4567-e89b-42d3-a456-426614174000',
+    action_id: null,
+    action_name: null,
+    clip_id: null,
+    clip_name: 'friendly-wave',
+    prompt: 'A friendly wave',
+    phase: 'generating' as const,
+    error: null,
+    error_code: null,
+    failure_phase: null,
+    attempt: 1,
+    provider_animation_id: 'remote-1',
+    frames: 90,
+    steps: 25,
+    seed: 7,
+    model: 'soma-rp-v1.1',
+    model_license: 'NVIDIA Open Model License',
+    source_sha256: null,
+    vrma_sha256: null,
+    converter_version: 'persona-soma30-v1',
+    created_at: '2026-08-31T00:00:00.000Z',
+    updated_at: '2026-08-31T00:00:01.000Z',
+  };
+  const requests: unknown[] = [];
+  const actionRequests: unknown[] = [];
+  const attachedRequests: unknown[] = [];
+  const configuredAction = {
+    id: '123e4567-e89b-42d3-a456-426614174002',
+    animation_name: 'friendly-wave',
+    animation_description: 'A friendly wave.',
+    animation_trigger_scenario: 'Use when greeting the user.',
+    expression_name: 'happy',
+    expression_weight: 0.8,
+    animation_type: null,
+    origin: 'user' as const,
+    system: false,
+    editable: true,
+    modified: false,
+    removable: true,
+    clips: [],
+    asset_urls: [],
+  };
+  const bridge = createBridgeServer({
+    port: 0,
+    onEvent: () => {},
+    mcpHandler: createPersonaMcpHandler({
+      onAnimation: () => true,
+      onWindowAction: () => false,
+      getStatus: () => ({}),
+      getAnimationClips: () => [{
+        id: clipId,
+        clip_name: 'friendly-wave',
+        source: 'kimodo',
+        asset_url: `persona-asset://animation/${clipId}.vrma`,
+        created_at: '2026-08-31T00:00:00.000Z',
+        prompt: 'A friendly wave',
+        generation_job_id: job.id,
+        linked_action_ids: [],
+      }],
+      onCreateAnimationAction: (metadata, clipIds) => {
+        actionRequests.push({ metadata, clipIds });
+        return configuredAction;
+      },
+      onAttachAnimationClip: (actionName, requestedClipId) => {
+        attachedRequests.push({ actionName, clipId: requestedClipId });
+        return configuredAction;
+      },
+      onGenerateAnimation: (request) => {
+        requests.push(request);
+        return job;
+      },
+      getAnimationGeneration: (jobId) => jobId === job.id ? job : null,
+    }),
+  });
+  const address = await bridge.listen();
+  const client = new Client({ name: 'persona-generation-test', version: '1.0.0' });
+  const transport = new StreamableHTTPClientTransport(
+    new URL(`http://127.0.0.1:${bridgePort(address)}/mcp`),
+  );
+  context.after(async () => {
+    await client.close();
+    await bridge.close();
+  });
+  await connectClient(client, transport);
+
+  const started = await client.callTool({
+    name: 'generate_animation',
+    arguments: {
+      prompt: 'A friendly wave',
+      clip_name: 'friendly-wave',
+      frames: 90,
+      steps: 25,
+      seed: 7,
+    },
+  });
+  assert.equal(started.isError, undefined);
+  assert.deepEqual(JSON.parse(resultText(started)), job);
+  assert.deepEqual(requests, [{
+    prompt: 'A friendly wave',
+    clip_name: 'friendly-wave',
+    frames: 90,
+    steps: 25,
+    seed: 7,
+  }]);
+
+  const progress = await client.callTool({
+    name: 'get_animation_generation',
+    arguments: { job_id: job.id },
+  });
+  assert.deepEqual(JSON.parse(resultText(progress)), job);
+
+  const clips = await client.callTool({ name: 'list_animation_clips', arguments: {} });
+  assert.equal(JSON.parse(resultText(clips))[0]?.id, clipId);
+  const created = await client.callTool({
+    name: 'create_animation_action',
+    arguments: {
+      animation_name: 'friendly-wave',
+      animation_description: 'A friendly wave.',
+      animation_trigger_scenario: 'Use when greeting the user.',
+      expression_name: 'happy',
+      expression_weight: 0.8,
+      clip_ids: [clipId],
+    },
+  });
+  assert.equal(JSON.parse(resultText(created)).animation_name, 'friendly-wave');
+  assert.deepEqual(actionRequests, [{
+    metadata: {
+      animation_name: 'friendly-wave',
+      animation_description: 'A friendly wave.',
+      animation_trigger_scenario: 'Use when greeting the user.',
+      expression_name: 'happy',
+      expression_weight: 0.8,
+    },
+    clipIds: [clipId],
+  }]);
+  const attached = await client.callTool({
+    name: 'attach_animation_clip',
+    arguments: { animation: 'friendly-wave', clip_id: clipId },
+  });
+  assert.equal(JSON.parse(resultText(attached)).id, configuredAction.id);
+  assert.deepEqual(attachedRequests, [{ actionName: 'friendly-wave', clipId }]);
 });
 
 test("Persona MCP exposes custom animation metadata in its tool contract", async (context) => {

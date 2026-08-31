@@ -58,6 +58,7 @@
     "@eslint/js": "^10.0.1",
     "@pixiv/three-vrm": "^3.4.4",
     "@pixiv/three-vrm-animation": "^3.4.4",
+    "@pixiv/types-vrmc-vrm-animation-1.0": "^3.5.5",
     "@pmndrs/assets": "^1.7.0",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.4.2",
@@ -170,6 +171,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "gltf-validator": "2.0.0-dev.3.10",
     "zod": "^4.4.3"
   },
   "overrides": {

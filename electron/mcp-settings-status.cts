@@ -7,8 +7,13 @@ const { version } = readPackageMetadata();
 export const MCP_TOOL_NAMES = Object.freeze([
   "play_animation",
   "list_animations",
+  "list_animation_clips",
+  "create_animation_action",
+  "attach_animation_clip",
   "control_window",
   "get_status",
+  "generate_animation",
+  "get_animation_generation",
 ]);
 export const MCP_TRANSPORT = 'Streamable HTTP';
 

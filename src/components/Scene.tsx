@@ -15,6 +15,7 @@ import dawnEnvironment from '@pmndrs/assets/hdri/dawn.exr';
 import * as THREE from 'three';
 import { Avatar } from './Avatar';
 import type { PlayableAnimationType } from '../animation-catalog';
+import type { AnimationTransition } from '../animation-scheduler';
 import { calculateFullBodyFraming } from '../camera-framing';
 import { drawingBufferPixel, passthroughForAlpha } from '../click-through';
 import {
@@ -32,6 +33,7 @@ import { resolveLightingSettings } from '../settings-defaults';
 interface SceneProps {
   animation: PlayableAnimationType;
   animationRequest: number;
+  animationTransition?: AnimationTransition;
   animationUrls?: readonly string[];
   fallbackAnimationUrls?: readonly string[];
   preloadAnimationUrls?: readonly string[];

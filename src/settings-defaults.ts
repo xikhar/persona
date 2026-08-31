@@ -147,7 +147,7 @@ export function resolveLightingSettings(
 }
 
 export const SETTINGS_FALLBACK: PersonaSettingsSnapshot = {
-  schema_version: 9,
+  schema_version: 10,
   default_model_id: null,
   character_size: 1,
   avatar_window: { ...DEFAULT_AVATAR_WINDOW_SIZE },
@@ -162,6 +162,7 @@ export const SETTINGS_FALLBACK: PersonaSettingsSnapshot = {
   packaged_animation_change_count: 0,
   models: [],
   animations: SYSTEM_ACTIONS,
+  animation_clips: [],
   model_lighting: {},
   voice_source: {
     mode: 'default',
@@ -207,6 +208,7 @@ export async function loadPackagedSettingsFallback(): Promise<PersonaSettingsSna
       id: `${animation.id}:packaged:${index + 1}`,
       animation_name: `${animation.animation_name}${index + 1}`,
       origin: 'packaged' as const,
+      source: 'packaged' as const,
       removable: false,
       asset_url: packagedAssetUrl(assetPath),
     })),

@@ -295,6 +295,11 @@ rather than spending its entire lifetime morphing between neighbors. Explicit
 clip weights sum to one during clip-to-clip retargets; the model's rest pose
 participates only when it is the intentional source or target.
 The sampled entry and exit ranges also control MCP-action blends.
+One-shot actions hold their authored first frame while that entry blend runs,
+then advance at normal clip speed. This keeps the blend smooth without
+consuming or hiding the beginning of the action. Speaking chunks are different:
+they keep advancing during their overlap so conversational motion remains
+continuous.
 `body_transition_ms` is the global duration for transitions between Idle
 and Speaking. A Speaking action starts on the first active signal and blends
 from Idle over that duration; Speaking-to-Speaking transitions use the sampled

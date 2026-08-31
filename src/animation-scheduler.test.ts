@@ -136,6 +136,108 @@ describe('animation scheduler timing', () => {
 });
 
 describe('animation scheduler transitions', () => {
+  it('holds a smooth one-shot on frame zero until its entry blend finishes', async () => {
+    const clips = {
+      idle: motionClip('idle'),
+      wave: motionClip('wave'),
+    };
+    const { events, scheduler, weight } = createHarness(clips);
+    const onComplete = vi.fn();
+    await scheduler.request({
+      animationRequest: 0,
+      animationUrls: ['idle'],
+      playback: 'loop',
+      type: 'IDLE',
+    });
+    scheduler.update(1);
+
+    await scheduler.request({
+      animationRequest: 1,
+      animationUrls: ['wave'],
+      onComplete,
+      playback: 'once',
+      type: 'CUSTOM',
+    });
+    scheduler.update(0.45);
+    const halfway = scheduler.getDebugSnapshot().weights.find(
+      (entry) => entry.url === 'wave',
+    );
+    expect(halfway?.actionTime).toBe(0);
+    expect(weight('wave')).toBeGreaterThan(0);
+    expect(weight('wave')).toBeLessThan(1);
+    expect(onComplete).not.toHaveBeenCalled();
+
+    scheduler.update(0.45);
+    expect(scheduler.getDebugSnapshot().transition).toBeNull();
+    expect(scheduler.getDebugSnapshot().weights).toEqual([
+      expect.objectContaining({ actionTime: 0, url: 'wave', weight: 1 }),
+    ]);
+    expect(
+      events.some((event) => event.event === 'one-shot-entry-released'),
+    ).toBe(true);
+    scheduler.update(1 / 30);
+    expect(scheduler.getDebugSnapshot().weights[0]?.actionTime).toBeCloseTo(
+      1 / 30,
+      8,
+    );
+    expect(onComplete).not.toHaveBeenCalled();
+    scheduler.update(2);
+    expect(onComplete).toHaveBeenCalledOnce();
+  });
+
+  it('applies excess render delta after a held one-shot entry boundary', async () => {
+    const { scheduler } = createHarness({ wave: motionClip('wave') });
+    await scheduler.request({
+      animationRequest: 1,
+      animationUrls: ['wave'],
+      playback: 'once',
+      type: 'CUSTOM',
+    });
+
+    scheduler.update(1.2);
+
+    expect(scheduler.getDebugSnapshot().transition).toBeNull();
+    expect(scheduler.getDebugSnapshot().weights[0]?.actionTime).toBeCloseTo(
+      0.3,
+      8,
+    );
+  });
+
+  it('starts an exact one-shot preview at its authored first frame', async () => {
+    const clips = {
+      idle: motionClip('idle'),
+      wave: motionClip('wave'),
+    };
+    const { running, scheduler, weight } = createHarness(clips);
+    await scheduler.request({
+      animationRequest: 0,
+      animationUrls: ['idle'],
+      playback: 'loop',
+      type: 'IDLE',
+    });
+    scheduler.update(1);
+
+    await scheduler.request({
+      animationRequest: 1,
+      animationUrls: ['wave'],
+      playback: 'once',
+      transition: 'immediate',
+      type: 'CUSTOM',
+    });
+
+    expect(scheduler.getDebugSnapshot().transition).toBeNull();
+    expect(scheduler.getDebugSnapshot().weights).toEqual([
+      expect.objectContaining({ actionTime: 0, url: 'wave', weight: 1 }),
+    ]);
+    expect(running('idle')).toBe(false);
+    scheduler.update(1 / 30);
+    expect(scheduler.getDebugSnapshot().weights[0]?.actionTime).toBeCloseTo(
+      1 / 30,
+      8,
+    );
+    expect(weight('wave')).toBe(1);
+  });
+
   it('retargets an in-progress blend without changing its current pose weights', async () => {
     const clips = {
       idle: motionClip('idle'),
@@ -555,12 +657,12 @@ describe('animation scheduler transitions', () => {
     );
   });
 
-  it('keeps authored clip speed independent from slow transition timing', async () => {
+  it('keeps TALK clips advancing at authored speed during their overlap', async () => {
     const clips = {
       talk1: motionClip('talk1', 1.2),
       talk2: motionClip('talk2', 1.4),
     };
-    const { scheduler } = createHarness(clips, {
+    const { events, scheduler } = createHarness(clips, {
       bodyTransitionMs: 1000,
       speakingDebounceMs: 500,
       idleInterimMs: 300,
@@ -583,6 +685,12 @@ describe('animation scheduler transitions', () => {
       0.5,
       8,
     );
+    expect(
+      events.find(
+        (event) =>
+          event.event === 'transition-started' && event.to === 'talk1',
+      )?.targetEntryHeld,
+    ).toBe(false);
 
     scheduler.update(0.6);
     await settle();
@@ -898,6 +1006,15 @@ describe('animation scheduler transitions', () => {
     scheduler.update(1.1);
 
     expect(firstComplete).not.toHaveBeenCalled();
+    expect(secondComplete).not.toHaveBeenCalled();
+    expect(scheduler.getDebugSnapshot().weights).toEqual([
+      expect.objectContaining({ url: 'second', weight: 1 }),
+    ]);
+    expect(scheduler.getDebugSnapshot().weights[0]?.actionTime).toBeCloseTo(
+      0.2,
+      8,
+    );
+    scheduler.update(0.81);
     expect(secondComplete).toHaveBeenCalledOnce();
   });
 });

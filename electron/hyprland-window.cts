@@ -5,6 +5,21 @@ import { errorMessage, isRecord } from './types.cjs';
 const execFileAsync = promisify(execFile);
 export const WINDOW_CLASS = 'persona';
 
+/**
+ * Packaged Electron launchers prepend their own libraries to LD_LIBRARY_PATH.
+ * A host utility such as hyprctl must resolve against the host system instead;
+ * otherwise it can load an incompatible bundled libstdc++ before it reaches
+ * the compositor socket.
+ */
+export function hyprctlEnvironment(
+  environment: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const sanitized = { ...environment };
+  delete sanitized.LD_LIBRARY_PATH;
+  delete sanitized.LD_PRELOAD;
+  return sanitized;
+}
+
 export interface WindowPosition {
   x: number;
   y: number;
@@ -152,6 +167,7 @@ export function buildLuaCommands(
 
 async function runHyprctlJson(command: string): Promise<unknown> {
   const { stdout } = await execFileAsync('hyprctl', ['-j', command], {
+    env: hyprctlEnvironment(),
     timeout: 2000,
     maxBuffer: 2 * 1024 * 1024,
   });
@@ -198,7 +214,10 @@ async function runLegacyCommands(
     ['setprop', window, 'opacity_fullscreen_override', '1', 'lock'],
   );
   for (const args of commands) {
-    await execFileAsync('hyprctl', args, { timeout: 2000 });
+    await execFileAsync('hyprctl', args, {
+      env: hyprctlEnvironment(),
+      timeout: 2000,
+    });
   }
 }
 
@@ -239,7 +258,10 @@ export async function configureHyprlandWindow({
     });
     try {
       for (const command of luaCommands) {
-        await execFileAsync('hyprctl', ['dispatch', command], { timeout: 2000 });
+        await execFileAsync('hyprctl', ['dispatch', command], {
+          env: hyprctlEnvironment(),
+          timeout: 2000,
+        });
       }
     } catch (error) {
       onDebug?.(

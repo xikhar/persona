@@ -20,6 +20,7 @@ import {
   type AnimationPlayback,
   type AnimationScheduleRequest,
   type AnimationSchedulerDebugEvent,
+  type AnimationTransition,
 } from '../animation-scheduler';
 
 interface PlayOptions {
@@ -28,6 +29,7 @@ interface PlayOptions {
   fallbackAnimationUrls?: readonly string[];
   onComplete?: () => void;
   playback?: AnimationPlayback;
+  transition?: AnimationTransition;
 }
 
 const animationDebugEnabled =
@@ -136,19 +138,22 @@ export function useVrmAnimation(
         fallbackAnimationUrls = [],
         onComplete,
         playback = 'loop',
+        transition = 'smooth',
       }: PlayOptions,
     ) => {
       const activeScheduler = scheduler.current;
-      if (!vrm || !activeScheduler) {
-        if (playback === 'once') onComplete?.();
-        return;
-      }
+      // Loading a model is not completion. `play` is recreated when `vrm`
+      // becomes ready, so Avatar's request effect will retry the same command
+      // against the newly created scheduler. Completing here would silently
+      // discard a one-shot delivered during application startup.
+      if (!vrm || !activeScheduler) return;
       const request: AnimationScheduleRequest = {
         animationRequest,
         animationUrls,
         fallbackAnimationUrls,
         onComplete,
         playback,
+        transition,
         type,
       };
       await activeScheduler.request(request);

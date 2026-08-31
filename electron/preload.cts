@@ -15,6 +15,10 @@ import type {
   ClickThroughMode,
   ClickThroughSnapshot,
   PersonaBridgeApi,
+  PersonaAnimationGenerationJob,
+  PersonaAnimationGenerationRequest,
+  PersonaAnimationGeneratorConfig,
+  PersonaAnimationGeneratorStatus,
   PersonaMcpStatus,
   PersonaSettingsApi,
   PersonaVroidHubApi,
@@ -44,6 +48,42 @@ function invoke<TResult>(channel: string, ...args: unknown[]): Promise<TResult> 
   return ipcRenderer.invoke(channel, ...args) as Promise<TResult>;
 }
 
+// The main process flushes startup events at `did-finish-load`, before React's
+// effects have necessarily subscribed. Listen from preload startup and retain
+// the latest value per state slot until the renderer attaches, otherwise a
+// cold-start animation command can disappear between page load and mount.
+const pendingPersonaEvents = new Map<string, AvatarRendererEvent>();
+const personaEventListeners = new Set<(event: AvatarRendererEvent) => void>();
+
+function personaEventKey(event: AvatarRendererEvent): string {
+  return event.type === 'expression-hold' || event.type === 'expression-release'
+    ? 'expression'
+    : event.type;
+}
+
+ipcRenderer.on(
+  'persona:event',
+  (_event: IpcRendererEvent, value: AvatarRendererEvent) => {
+    if (personaEventListeners.size === 0) {
+      pendingPersonaEvents.set(personaEventKey(value), value);
+      return;
+    }
+    for (const listener of personaEventListeners) listener(value);
+  },
+);
+
+function subscribePersonaEvents(
+  listener: (event: AvatarRendererEvent) => void,
+): Unsubscribe {
+  personaEventListeners.add(listener);
+  if (pendingPersonaEvents.size > 0) {
+    const pending = [...pendingPersonaEvents.values()];
+    pendingPersonaEvents.clear();
+    for (const event of pending) listener(event);
+  }
+  return () => personaEventListeners.delete(listener);
+}
+
 const personaBridge = {
   getClickThrough: (): Promise<ClickThroughSnapshot> =>
     invoke<ClickThroughSnapshot>('persona:get-click-through'),
@@ -55,7 +95,7 @@ const personaBridge = {
   setMousePassthrough: (ignore: boolean): void =>
     ipcRenderer.send('persona:set-mouse-passthrough', ignore),
   subscribe: (listener: (event: AvatarRendererEvent) => void): Unsubscribe =>
-    subscribe('persona:event', listener),
+    subscribePersonaEvents(listener),
 } satisfies PersonaBridgeApi;
 
 const personaSettings = {
@@ -65,11 +105,49 @@ const personaSettings = {
     invoke<SettingsSnapshot | null>('persona:settings-import-model', metadata),
   createAnimation: (metadata: AnimationMetadata): Promise<SettingsSnapshot> =>
     invoke<SettingsSnapshot>('persona:settings-create-animation', metadata),
+  createAnimationWithClips: (
+    metadata: AnimationMetadata,
+    clipIds: string[],
+  ): Promise<SettingsSnapshot> => invoke<SettingsSnapshot>(
+    'persona:settings-create-animation-with-clips',
+    metadata,
+    clipIds,
+  ),
   addAnimationClips: (animationId: string): Promise<SettingsSnapshot | null> =>
     invoke<SettingsSnapshot | null>(
       'persona:settings-add-animation-clips',
       animationId,
     ),
+  importAnimationClips: (): Promise<SettingsSnapshot | null> =>
+    invoke<SettingsSnapshot | null>('persona:settings-import-animation-clips'),
+  attachAnimationClip: (
+    animationId: string,
+    clipId: string,
+  ): Promise<SettingsSnapshot> => invoke<SettingsSnapshot>(
+    'persona:settings-attach-animation-clip',
+    animationId,
+    clipId,
+  ),
+  attachAnimationClips: (
+    animationId: string,
+    clipIds: string[],
+  ): Promise<SettingsSnapshot> => invoke<SettingsSnapshot>(
+    'persona:settings-attach-animation-clips',
+    animationId,
+    clipIds,
+  ),
+  detachAnimationClip: (
+    animationId: string,
+    clipId: string,
+  ): Promise<SettingsSnapshot> => invoke<SettingsSnapshot>(
+    'persona:settings-delete-animation-clip',
+    animationId,
+    clipId,
+  ),
+  deleteAnimationLibraryClip: (clipId: string): Promise<SettingsSnapshot> =>
+    invoke<SettingsSnapshot>('persona:settings-delete-animation-library-clip', clipId),
+  exportAnimationLibraryClip: (clipId: string): Promise<boolean> =>
+    invoke<boolean>('persona:settings-export-animation-library-clip', clipId),
   updateAnimation: (
     animationId: string,
     metadata: AnimationMetadata,
@@ -156,11 +234,48 @@ const personaSettings = {
     invoke<SettingsSnapshot>('persona:settings-reset-model-lighting', modelId),
   getMcpStatus: (): Promise<PersonaMcpStatus> =>
     invoke<PersonaMcpStatus>('persona:settings-get-mcp-status'),
+  openKimodoRepository: (): Promise<void> =>
+    invoke<void>('persona:settings-open-kimodo-repository'),
+  getAnimationGeneratorStatus: (): Promise<PersonaAnimationGeneratorStatus> =>
+    invoke<PersonaAnimationGeneratorStatus>('persona:settings-animation-generator-status'),
+  setAnimationGeneratorConfig: (
+    config: PersonaAnimationGeneratorConfig,
+  ): Promise<PersonaAnimationGeneratorStatus> =>
+    invoke<PersonaAnimationGeneratorStatus>(
+      'persona:settings-animation-generator-set-config',
+      config,
+    ),
+  checkAnimationGenerator: (): Promise<PersonaAnimationGeneratorStatus> =>
+    invoke<PersonaAnimationGeneratorStatus>('persona:settings-animation-generator-check'),
+  generateAnimation: (
+    request: PersonaAnimationGenerationRequest,
+  ): Promise<PersonaAnimationGenerationJob> =>
+    invoke<PersonaAnimationGenerationJob>(
+      'persona:settings-animation-generator-start',
+      request,
+    ),
+  retryAnimationGeneration: (jobId: string): Promise<PersonaAnimationGenerationJob> =>
+    invoke<PersonaAnimationGenerationJob>(
+      'persona:settings-animation-generator-retry',
+      jobId,
+    ),
+  discardAnimationGeneration: (jobId: string): Promise<PersonaAnimationGenerationJob[]> =>
+    invoke<PersonaAnimationGenerationJob[]>(
+      'persona:settings-animation-generator-discard',
+      jobId,
+    ),
+  listAnimationGenerations: (): Promise<PersonaAnimationGenerationJob[]> =>
+    invoke<PersonaAnimationGenerationJob[]>('persona:settings-animation-generator-list'),
+  clearAnimationGenerations: (): Promise<PersonaAnimationGenerationJob[]> =>
+    invoke<PersonaAnimationGenerationJob[]>('persona:settings-animation-generator-clear'),
   setWindowTheme: (theme: 'light' | 'dark'): void =>
     ipcRenderer.send('persona:settings-set-window-theme', theme),
   subscribe: (
     listener: (snapshot: SettingsSnapshot) => void,
   ): Unsubscribe => subscribe('persona:settings-updated', listener),
+  subscribeAnimationGenerations: (
+    listener: (job: PersonaAnimationGenerationJob) => void,
+  ): Unsubscribe => subscribe('persona:animation-generation-updated', listener),
 } satisfies PersonaSettingsApi;
 
 const personaVroidHub = {

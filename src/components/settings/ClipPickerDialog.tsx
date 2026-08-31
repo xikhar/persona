@@ -1,0 +1,179 @@
+import { useMemo, useState } from 'react';
+import { CheckIcon, PlusIcon, TrashIcon } from './icons';
+import { SettingsDialog } from './SettingsDialog';
+
+export function ClipPickerDialog({
+  action,
+  available,
+  busy,
+  clips,
+  onAdd,
+  onClose,
+  onDelete,
+  onImport,
+}: {
+  action: PersonaAnimationSettings;
+  available: boolean;
+  busy: boolean;
+  clips: readonly PersonaAnimationLibraryClip[];
+  onAdd: (clipIds: readonly string[]) => Promise<boolean>;
+  onClose: () => void;
+  onDelete: (clip: PersonaAnimationLibraryClip) => void;
+  onImport: () => Promise<readonly PersonaAnimationLibraryClip[]>;
+}) {
+  const [selectedIds, setSelectedIds] = useState<readonly string[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const linkedIds = useMemo(
+    () => new Set(action.clips.map((clip) => clip.id)),
+    [action.clips],
+  );
+  const savedIds = useMemo(() => new Set(clips.map((clip) => clip.id)), [clips]);
+  const selectableIds = selectedIds.filter(
+    (clipId) => savedIds.has(clipId) && !linkedIds.has(clipId),
+  );
+  const dialogBusy = busy || adding || importing;
+  const addLabel = selectableIds.length === 0
+    ? 'Add clips'
+    : `Add ${selectableIds.length} clip${selectableIds.length === 1 ? '' : 's'}`;
+
+  const toggleClip = (clipId: string) => {
+    if (linkedIds.has(clipId) || dialogBusy) return;
+    setSelectedIds((current) =>
+      current.includes(clipId)
+        ? current.filter((candidate) => candidate !== clipId)
+        : [...current, clipId],
+    );
+  };
+
+  const importClips = async () => {
+    setImporting(true);
+    try {
+      const imported = await onImport();
+      const importedIds = imported
+        .filter((clip) => !linkedIds.has(clip.id))
+        .map((clip) => clip.id);
+      if (importedIds.length > 0) {
+        setSelectedIds((current) => [...new Set([...current, ...importedIds])]);
+      }
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const addSelected = async () => {
+    if (selectableIds.length === 0) return;
+    setAdding(true);
+    try {
+      if (await onAdd(selectableIds)) onClose();
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const actionLabel = action.system
+    ? action.animation_type === 'IDLE'
+      ? 'Idle'
+      : 'Speaking'
+    : action.animation_name;
+
+  return (
+    <SettingsDialog
+      busy={dialogBusy}
+      eyebrow="Animation action"
+      footer={
+        <>
+          <button
+            className="btn btn-secondary"
+            disabled={dialogBusy || !available}
+            onClick={() => void importClips()}
+            type="button"
+          >
+            <PlusIcon />
+            {importing ? 'Importing…' : 'Import VRMA'}
+          </button>
+          <span className="dialog-footer-spacer" />
+          <button
+            className="btn btn-ghost"
+            disabled={dialogBusy}
+            onClick={onClose}
+            type="button"
+          >
+            Cancel
+          </button>
+          <button
+            className="btn btn-primary"
+            disabled={dialogBusy || !available || selectableIds.length === 0}
+            onClick={() => void addSelected()}
+            type="button"
+          >
+            {adding ? 'Adding…' : addLabel}
+          </button>
+        </>
+      }
+      onClose={onClose}
+      title={`Add clips to ${actionLabel}`}
+      wide
+    >
+      <p className="dialog-lede">
+        Select one or more saved clips. Importing a VRMA adds it to this library
+        so it can be reused by other actions too.
+      </p>
+
+      {clips.length === 0 ? (
+        <div className="empty-library">
+          <strong>No saved clips yet</strong>
+          <p>Import a VRMA below, or generate a clip from the Kimodo tab.</p>
+        </div>
+      ) : (
+        <div className="clip-picker-grid">
+          {clips.map((clip) => {
+            const linked = linkedIds.has(clip.id);
+            const selected = selectedIds.includes(clip.id) && !linked;
+            return (
+              <article
+                className={`clip-picker-card ${linked || selected ? 'is-selected' : ''}`}
+                key={clip.id}
+              >
+                <button
+                  aria-checked={linked || selected}
+                  aria-label={linked ? `${clip.clip_name} is already added` : `${selected ? 'Deselect' : 'Select'} ${clip.clip_name}`}
+                  className="clip-picker-card-select"
+                  disabled={linked || dialogBusy}
+                  onClick={() => toggleClip(clip.id)}
+                  role="checkbox"
+                  type="button"
+                >
+                  <span className="clip-picker-card-top">
+                    <span className="row-mark">
+                      {(linked || selected) && <CheckIcon />}
+                    </span>
+                    <span className="row-copy">
+                      <strong>{clip.clip_name}</strong>
+                      <small>{clip.source === 'kimodo' ? 'Generated by Kimodo' : 'Imported VRMA'}</small>
+                    </span>
+                  </span>
+                  <span className="clip-picker-card-meta">
+                    {linked
+                      ? 'Already added to this action'
+                      : `Used by ${clip.linked_action_ids.length} action${clip.linked_action_ids.length === 1 ? '' : 's'}`}
+                  </span>
+                </button>
+                <button
+                  aria-label={`Delete ${clip.clip_name}`}
+                  className="btn btn-danger btn-icon clip-picker-card-delete"
+                  disabled={dialogBusy || !available}
+                  onClick={() => onDelete(clip)}
+                  title="Delete clip from library"
+                  type="button"
+                >
+                  <TrashIcon />
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </SettingsDialog>
+  );
+}

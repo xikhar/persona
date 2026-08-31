@@ -47,7 +47,9 @@ export function SettingsDialog({
         : null;
     // The first field, so typing can start immediately; the dialog itself when
     // it holds nothing focusable.
-    const first = dialogRef.current?.querySelector<HTMLElement>(FOCUSABLE);
+    const first =
+      dialogRef.current?.querySelector<HTMLElement>('[data-dialog-autofocus]') ??
+      dialogRef.current?.querySelector<HTMLElement>(FOCUSABLE);
     (first ?? dialogRef.current)?.focus();
     return () => opener?.focus();
   }, []);

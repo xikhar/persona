@@ -171,3 +171,15 @@ test("main registers every settings and VRoid Hub channel behind the gate", () =
       gated.includes("persona:vroid-get-credentials"),
   );
 });
+
+test('Kimodo repository navigation uses one fixed Settings-only URL', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'main.cjs'), 'utf8');
+  assert.match(
+    source,
+    /const KIMODO_REPOSITORY_URL = ["']https:\/\/github\.com\/localai-org\/kimodo\.cpp["'];/u,
+  );
+  assert.match(
+    source,
+    /handleFromSettings\([\s\S]{0,120}?["']persona:settings-open-kimodo-repository["'][\s\S]{0,160}?shell\.openExternal\(KIMODO_REPOSITORY_URL\)/u,
+  );
+});
